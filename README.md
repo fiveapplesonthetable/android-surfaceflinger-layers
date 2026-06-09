@@ -30,6 +30,10 @@ The chapters build on each other, but each is self-contained enough to read alon
 | 6 | [Two views of one display: layers vs video](06-two-views-layers-vs-video.md) | The other display data source, why the two are independent, and the subtle **virtual-display** overlap. |
 | 7 | [The UI plugin, annotated](07-the-ui-plugin.md) | Every file of `com.android.SurfaceFlinger`, every important snippet: the session, the data layer, the 2D-canvas 3D rects view, the hierarchy, the DataGrid properties, the timeline track. |
 | 8 | [Reviewer's guide](08-reviewers-guide.md) | Invariants, the async race conditions and the token fix, memoization, the empty-state semantics, known limitations, and what to probe in review. |
+| 9 | [One layer, end to end](09-one-layer-end-to-end.md) | The capstone: a single real layer (`StatusBar#75`) traced through every stage with **actual numbers** from the demo trace. |
+| 10 | [Transactions & the other viewers](10-transactions-and-other-viewers.md) | The transactions data source (the *input* side), and WM / IME / ViewCapture / ProtoLog / Shell Transitions — one importer, one bounds fix. |
+| 11 | [Capture it yourself](11-capture-and-explore.md) | Hands-on: capture a trace, open it, and tour every feature with screenshots. |
+| — | [UI deep-dive (line-by-line)](ui-deep-dive.md) | The exhaustive companion to Ch. 7 — every algorithm in the plugin, in full. |
 | — | [Glossary](glossary.md) | Every term in one place. |
 
 If you only want the **Android graphics education**, read 1→2→3. If you only want the **trace/plugin engineering**, read 4→5→7→8. If you're reviewing the change, read 5, 7, 8.

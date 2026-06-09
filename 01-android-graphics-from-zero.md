@@ -116,6 +116,20 @@ with ownership documented at `BufferSlot.h:60`:
 
 Here is the full cycle. Notice that pixels move by *reference* (a slot index) and synchronization is by *fence*, never by blocking on the GPU.
 
+```
+            dequeueBuffer          queueBuffer            acquireBuffer
+   ┌──► FREE ───────────► DEQUEUED ───────────► QUEUED ───────────────► ACQUIRED ──┐
+   │   (BufferQueue       (producer/app          (in the FIFO,           (consumer/  │
+   │    owns it)           draws into it)         + acquire fence)        SF reads)   │
+   │                                                  │                               │
+   │                                          async mode: newest                      │
+   │                                          frame overwrites the                    │
+   │                                          old queued one (drop)         releaseBuffer
+   └──────────────────────────────────────────────────────────────────────  ◄───────┘
+        notifyBufferReleased() wakes a producer blocked in dequeueBuffer    (+ release fence)
+```
+
+
 ### Step 1 — `dequeueBuffer`: the producer takes a FREE slot
 
 ```cpp

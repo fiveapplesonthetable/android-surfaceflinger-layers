@@ -295,6 +295,26 @@ GPU virtual displays can even be **offloaded** to a background CompositionEngine
 
 ---
 
+## 2.7b The whole pipeline, drawn
+
+```
+vsync ─► Scheduler::onFrameSignal
+          │
+          ├─ commit() ── flush transactions ─► apply to layer tree ─► latch buffers
+          │              ─► rebuild LayerSnapshot ─► returns mustComposite
+          │                         └──────────────► LayerTracing serializes it ──► trace (Ch.4)
+          │
+          └─ composite() ── CompositionEngine::present, per display Output:
+                              prepareFrame ─► validate with HWC ─► getChangedCompositionTypes
+                                  │                                       │
+                            DEVICE layers                          CLIENT layers
+                                  │                                       │
+                            HWC overlay plane                  RenderEngine (GPU) ─► client target
+                                  └───────────────┬───────────────────────┘
+                                                  ▼
+                                        present (to the panel) ─► present fence
+```
+
 ## 2.8 The whole frame, in one breath
 
 1. vsync → `Scheduler::onFrameSignal`.

@@ -136,6 +136,21 @@ private async loadIndex(i: number, token: number): Promise<void> {
 
 This is the signature view: a rotatable, stacked 3D rendering of the layer rectangles, drawn with a **pure 2D canvas** (no WebGL/Three.js, so it renders in headless CI where the standalone Winscope's WebGL view is blank).
 
+### The projection, drawn
+
+```
+ layer bounds (x,y,w,h)
+        │  apply affine transform:  x' = dsdx·x + dtdx·y + tx ,  y' = dtdy·x + dsdy·y + ty
+        ▼
+ a quad (4 corners)
+        │  stack along Z by draw depth (zStep = explode · 160)
+        ▼
+ rotate: yaw around Y, then pitch around X      pitch = rotation · π/8 ;  yaw = 1.5 · pitch
+        │  orthographic project (drop Z), fit into the canvas minus the right label gutter
+        ▼
+ screen quad ──► fill (gradient/opacity/wireframe) + border + leader-line label in the gutter
+```
+
 ### The math, from the bottom up
 
 A layer's rect is its bounds transformed by its affine matrix (Chapters 3.6, 4.4):

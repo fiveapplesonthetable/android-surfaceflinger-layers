@@ -110,4 +110,4 @@ The repo enforces `@typescript-eslint/strict-boolean-expressions`, `consistent-t
 - [ ] A display with no snapshots → "No snapshots for this display"; no displays → the record-this hint.
 - [ ] Open-in-viewer ↔ jump-to-timeline → land on the same frame, same index/timestamp.
 
-[« Chapter 7](07-the-ui-plugin.md)  ·  [Glossary »](glossary.md)
+[« Chapter 7](07-the-ui-plugin.md)  ·  [Chapter 9 — One layer, end to end »](09-one-layer-end-to-end.md)

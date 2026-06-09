@@ -23,7 +23,25 @@ Two cross-cutting tricks you'll see on every row:
 
 ## 5.2 The tables
 
-From `src/trace_processor/tables/winscope_tables.py`. The SurfaceFlinger viewer touches six.
+From `src/trace_processor/tables/winscope_tables.py`. The SurfaceFlinger viewer touches six. Here's how one snapshot proto fans out into them:
+
+```
+LayersSnapshotProto (one TracePacket, field 93)
+ ├─ snapshot ──► __intrinsic_surfaceflinger_layers_snapshot {ts, base64_proto_id, arg_set_id}
+ ├─ DisplayProto[] ─► __intrinsic_surfaceflinger_display {snapshot_id, is_virtual, display_id,
+ │                         trace_rect_id ─┐
+ └─ LayerProto[]  ─► __intrinsic_surfaceflinger_layer {snapshot_id, layer_id, layer_name,
+                          is_visible, hwc_composition_type, z_order_relative_of,
+                          base64_proto_id, arg_set_id, layer_rect_id ─┐
+                                                                      ▼  (both rect_ids point here)
+                          __intrinsic_winscope_trace_rect {group_id (= layer_stack), depth,
+                              is_visible, opacity,
+                              rect_id ─────► __intrinsic_winscope_rect {x, y, w, h}        (deduped)
+                              transform_id ► __intrinsic_winscope_transform {dsdx..ty}}    (deduped)
+
+      every proto field ─► args {arg_set_id, key, value}      raw bytes ─► string pool (base64_proto_id)
+```
+
 
 ### Geometry, deduplicated
 
