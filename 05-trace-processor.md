@@ -75,7 +75,7 @@ C('transform_id', CppTableId(WINSCOPE_TRANSFORM_TABLE)),  # FK -> the matrix
 C('border_width', CppOptional(CppDouble())),
 C('border_color', CppOptional(CppUint32())),
 ```
-This is the heart of the geometry model: a rect (the bounds) + a transform (the matrix) + per-frame attributes, with **`group_id` = the layer stack** (Chapter 3.4). The plugin's "which display does this layer belong to" is `group_id == display.group_id`.
+This is the geometry model in one row: a rect (the bounds) + a transform (the matrix) + per-frame attributes, with **`group_id` = the layer stack** (Chapter 3.4). The plugin's "which display does this layer belong to" is `group_id == display.group_id`.
 
 ### Snapshot, display, layer
 
@@ -249,7 +249,7 @@ This is a design question worth stating, because it's the kind of thing a review
 - It does **not** belong in the generic `storage_tables` plugin (which sweeps ftrace/sched/slice/etc. for bounds) — that's a different, shared plugin. Putting winscope tables there would be the wrong owner.
 - It belongs in the **winscope importer**, exactly mirroring how the video and audio frame importers report the bounds of *their* tables. Each importer owns the bounds of the tables it populates. That's the idiomatic, consistent place.
 
-### One honest wrinkle
+### One wrinkle worth knowing
 
 A `transactions`-bearing capture carries old *buffered* transaction timestamps, so its bounds can span a huge range while the layer snapshots cover only a few seconds. A **SF-layers-only** capture is clean (bounds = the snapshot range). That's why the "simple capture" recommended in Chapter 4.5 is layers-only.
 

@@ -18,7 +18,9 @@ m('div.bar',                  // tag + CSS class — like writing <div class="ba
   ['hello', m('span', x)]);   // children: strings or more vnodes
 ```
 
-There is no state store and no `setState`. Mithril re-runs `view()` and diffs the result against the real DOM after every event handler, and after an explicit `m.redraw()` (which is how *async* results — a finished SQL query — get on screen). So the rule of thumb when reading this plugin is: **the view is a pure function of the session object; anything async ends in `m.redraw()`.** Lifecycle hooks `oncreate`/`onupdate` run when a vnode's real DOM element (`v.dom`) is first attached and on each later redraw — §7.3 uses them to drive the `<canvas>`.
+There is no state store and no `setState`. Mithril re-runs `view()` and diffs the result against the real DOM after every event handler, and after an explicit `m.redraw()` (which is how *async* results — a finished SQL query — get on screen).
+
+> **The one rule for reading this plugin: the view is a pure function of the session object, and anything async ends in `m.redraw()`.** Lifecycle hooks `oncreate`/`onupdate` run when a vnode's real DOM element (`v.dom`) is first attached and on each later redraw — §7.3 uses them to drive the `<canvas>`.
 
 **The plugin API surface.** A plugin is a class implementing `PerfettoPlugin`; Perfetto calls its `onTraceLoad(ctx)` once per trace, and only if the plugin is listed in `default_plugins.ts`. The `ctx` argument (a `Trace`) is the entire API, and this plugin touches four corners of it:
 
@@ -74,7 +76,7 @@ export function sqlInt(value: string): string {
 }
 ```
 
-`queryLayers(snapshotId)` is the workhorse — it LEFT JOINs the layer to its decorated rect, the rect's geometry, and the transform matrix (the Chapter 5.7 query), and maps each row to an `SfLayer`. Note `groupId` comes from `tr.group_id` and is `undefined` for rect-less layers; `base64ProtoId` is the dedup id used for diffing; `hwcCompositionType` is the int from Chapter 2.5.
+`queryLayers(snapshotId)` is the widest query — it LEFT JOINs the layer to its decorated rect, the rect's geometry, and the transform matrix (the Chapter 5.7 query), and maps each row to an `SfLayer`. Note `groupId` comes from `tr.group_id` and is `undefined` for rect-less layers; `base64ProtoId` is the dedup id used for diffing; `hwcCompositionType` is the int from Chapter 2.5.
 
 `queryArgs(argSetId)` reads the flattened proto fields from the generic `args` table — this is what the Properties pane's curated rows and proto dump are built from. The `value_type` column drives whether a value is read as int/real/string/bool (bool is `it.i !== null && it.i !== 0n` — handled explicitly so the linter's strict-boolean rule is satisfied and `0`/null are unambiguous).
 
@@ -116,7 +118,7 @@ This is the direct expression of Chapter 3.4: the **Surface** is scoped to the s
 
 ### Async loading with two independent tokens (the race fix)
 
-This is the trickiest code in the plugin. Loading is async (every `queryLayers`/`queryArgs` is a round-trip to the WASM engine), and the user can scrub or change displays faster than queries resolve. Two **monotonic tokens** discard superseded work:
+This is the most concurrency-sensitive code in the plugin — worth reading slowly. Loading is async (every `queryLayers`/`queryArgs` is a round-trip to the WASM engine), and the user can scrub or change displays faster than queries resolve. Two **monotonic tokens** discard superseded work:
 
 ```ts
 private loadToken = 0;   // guards a display/snapshot/layer load
@@ -226,6 +228,7 @@ const msg = hiddenByVis > 0
   ? `No visible layers — ${hiddenByVis} hidden. Uncheck “Only visible” to show.`
   : 'No layers with bounds in this snapshot.';
 ```
+(`showOnlyVisible` here is the rects view's name for the session's `rectsOnlyVisible` option, mapped across by `rectsOptionsFrom` in §7.4.)
 
 ---
 

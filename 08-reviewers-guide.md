@@ -49,7 +49,7 @@ The plugin loads everything async from the WASM engine while the user scrubs/cli
 
 ---
 
-## 8.5 Known limitations (honest)
+## 8.5 Known limitations
 
 Things the standalone Winscope does that this plugin does not yet, mostly because a layers-only trace doesn't carry the data:
 

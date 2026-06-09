@@ -117,7 +117,7 @@ Because both surfaces read one shared session and show the snapshot index + time
 
 This is the reason the layer structure belongs *inside* Perfetto rather than in a separate tool. Capture layers **alongside** the frame timeline and scheduling, and you can go from "the screen stuttered" to "this specific layer fell back to GPU and blew the budget" on one timeline.
 
-Capture more than just layers:
+The loop you're about to run: find a janked frame on the frame timeline → jump to the SF snapshot at that instant → read which layer fell back to GPU and why. To make all three visible, capture more than just layers:
 
 ```
 buffers { size_kb: 65536 }

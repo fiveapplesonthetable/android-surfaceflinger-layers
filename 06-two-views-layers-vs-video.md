@@ -1,6 +1,6 @@
 # Chapter 6 — Two views of one display: layers vs video
 
-*Prerequisite: [Chapter 5](05-trace-processor.md). A short but important chapter. There are **two** Perfetto data sources that capture "the display." This one (layers) captures **structure**; the sibling (video frames) captures **pixels**. They are independent — and the one place they touch is the virtual-display trick, which is exactly why a screen recording shows up as an extra display in the layers viewer.*
+*Prerequisite: [Chapter 5](05-trace-processor.md). There are **two** Perfetto data sources that capture "the display." This one (layers) captures **structure**; the sibling (video frames) captures **pixels**. They are independent — and the one place they touch is the virtual-display trick, which is exactly why a screen recording shows up as an extra display in the layers viewer.*
 
 This chapter cites the video side from the [android-display-video-pipeline](https://github.com/fiveapplesonthetable/android-display-video-pipeline) repo and its design docs; the layers side from live AOSP/Perfetto as in Chapters 4–5. Where the video docs disagree among themselves (they describe two wire revisions), this chapter flags it rather than guess.
 
@@ -74,6 +74,6 @@ They don't "overlap" because they're orthogonal granularities. The layers source
 - **Video** = `android.display.video` → its own importer → `__intrinsic_video_frames` + zero-copy encoded blobs, captured via an auto-mirror virtual display feeding MediaCodec. *(The sibling.)*
 - **Independent** data sources, configs, importers, and tables. The **only** intersection: the video feature's encoder virtual display is itself *visible* (as `is_virtual=1`, with a mirror layer) in the layers display list when both are recorded — which is precisely why the layers viewer can list a `(virtual)` display whose only layer is an invisible mirror.
 
-Now, the plugin itself.
+That's the last piece of background. We now return to the main line — the tables from Chapter 5 — and build the UI that queries them.
 
 [« Chapter 5](05-trace-processor.md)  ·  [Chapter 7 — The UI plugin, annotated »](07-the-ui-plugin.md)

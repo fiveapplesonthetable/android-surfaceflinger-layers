@@ -1,6 +1,6 @@
 # Chapter 10 — Transactions, and the other Winscope viewers
 
-*Prerequisite: Chapters 4–5. The layers source is one of a **family** of Winscope data sources that all flow through the same trace_processor importer and all benefit from the same trace-bounds fix. This chapter covers the **transactions** source (the *input* side of the layer tree) and situates the rest: WindowManager, IME, ViewCapture, ProtoLog, Shell Transitions. It's why the bounds fix says "winscope tables," not "SurfaceFlinger tables."*
+*Prerequisite: Chapters 2–5 (transactions and the commit loop, the layer tree, the trace tables). The layers source is one of a **family** of Winscope data sources that all flow through the same trace_processor importer and all benefit from the same trace-bounds fix. This chapter covers the **transactions** source (the *input* side of the layer tree) and situates the rest: WindowManager, IME, ViewCapture, ProtoLog, Shell Transitions. It's why the bounds fix says "winscope tables," not "SurfaceFlinger tables."*
 
 ---
 

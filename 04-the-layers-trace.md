@@ -1,6 +1,6 @@
 # Chapter 4 — The layers trace
 
-*Prerequisite: [Chapter 3](03-layers-and-displays-data-model.md). We now leave the device. This chapter is the exact bytes: how SurfaceFlinger serializes a snapshot of its layer tree, the proto schema field by field, the transform-matrix encoding (which trips everyone up), and the `android.surfaceflinger.layers` data source with its capture flags.*
+*Prerequisite: [Chapter 3](03-layers-and-displays-data-model.md). We now leave the device. This chapter is the exact bytes: how SurfaceFlinger serializes a snapshot of its layer tree, the proto schema field by field, the transform-matrix encoding (read the equation, not the float names), and the `android.surfaceflinger.layers` data source with its capture flags.*
 
 Two source trees are involved:
 - **The schema** lives twice — a legacy hand-written copy at `~/dev/aosp/development/tools/winscope/protos/surfaceflinger/udc/` and the live Perfetto copy at `~/dev/aosp/external/perfetto/protos/perfetto/trace/android/`. They're kept in sync by hand; the Perfetto copy is newer. Citations below use the Perfetto copy.
@@ -48,7 +48,7 @@ The legacy on-disk file wraps these in a `LayersTraceFileProto { fixed64 magic_n
 
 ## 4.2 One layer: `LayerProto`
 
-This is the big one (`surfaceflinger_layers.proto:151`, `message LayerProto`). Grouped by what the plugin uses:
+This is the big one (`surfaceflinger_layers.proto:151`, `message LayerProto`). You won't memorize these — skim the group headings and come back when a Properties-pane field puzzles you. The point is that *every* pane field traces to a numbered proto field. Grouped by what the plugin uses:
 
 **Identity & tree**
 - `id = 1` unique id; `name = 2` (e.g. `"StatusBar#75"`; SF appends `"(Mirror)"` for clones, `LayerProtoHelper.cpp:468`); `type = 5`; `parent = 25` (`-1` if none); `children = 3`; `relatives = 4`; `z_order_relative_of = 26`; `is_relative_of = 51`; `original_id = 58`.
@@ -98,7 +98,7 @@ message DisplayProto {
 
 ---
 
-## 4.4 The transform encoding (the part everyone gets wrong)
+## 4.4 The transform encoding (read the equation, not the names)
 
 ```proto
 // surfaceflinger_common.proto:34

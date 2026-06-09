@@ -35,12 +35,12 @@ The chapters build on each other, but each is self-contained enough to read alon
 | 7 | [The UI plugin, annotated](07-the-ui-plugin.md) | Every file of `com.android.SurfaceFlinger`, every important snippet: the session, the data layer, the 2D-canvas 3D rects view, the hierarchy, the DataGrid properties, the timeline track. |
 | 8 | [Reviewer's guide](08-reviewers-guide.md) | Invariants, the async race conditions and the token fix, memoization, the empty-state semantics, known limitations, and what to probe in review. |
 | 9 | [One layer, end to end](09-one-layer-end-to-end.md) | The capstone: a single real layer (`StatusBar#75`) traced through every stage with **actual numbers** from the demo trace. |
-| 10 | [Transactions & the other viewers](10-transactions-and-other-viewers.md) | The transactions data source (the *input* side), and WM / IME / ViewCapture / ProtoLog / Shell Transitions — one importer, one bounds fix. |
+| 10 | [Transactions & the other Winscope viewers](10-transactions-and-other-viewers.md) | The transactions data source (the *input* side), and WM / IME / ViewCapture / ProtoLog / Shell Transitions — one importer, one bounds fix. |
 | 11 | [Capture it yourself](11-capture-and-explore.md) | Hands-on: capture a trace, open it, and tour every feature with screenshots. |
 | — | [UI deep-dive (line-by-line)](ui-deep-dive.md) | The exhaustive companion to Ch. 7 — every algorithm in the plugin, in full. |
 | — | [Glossary](glossary.md) | Every term in one place. |
 
-Suggested paths: for the **Android graphics education**, read 1→2→3 (then 9 for a worked example). For the **trace/plugin engineering**, read 4→5→7 (then the [UI deep-dive](ui-deep-dive.md)) →8. If you're **reviewing the change**, read 5, 7, 8. If you just want to **use it**, jump to [Chapter 11](11-capture-and-explore.md) and keep [Chapter 9](09-one-layer-end-to-end.md) (one real layer, end to end) and the [glossary](glossary.md) open beside it.
+Suggested paths: for the **Android graphics education**, read 1→2→3 (then skim 4–5 and read 9 for a worked example — 9 leans on the proto/SQL stages). For the **trace/plugin engineering**, read 4→5→7 (then the [UI deep-dive](ui-deep-dive.md)) →8. If you're **reviewing the change**, read 5, 7, 8. If you just want to **use it**, jump to [Chapter 11](11-capture-and-explore.md) and keep [Chapter 9](09-one-layer-end-to-end.md) (one real layer, end to end) and the [glossary](glossary.md) open beside it.
 
 ---
 
@@ -53,7 +53,7 @@ A modern phone screen is a lie told 60–120 times a second. There is no single 
 
 So the screen you see is the *output* of compositing. It throws away the structure: once layers are flattened into pixels you can no longer ask "which surface is that? how big is it? is it occluded? what's behind it?".
 
-**The layers trace preserves that structure.** SurfaceFlinger can serialize a *snapshot* of its entire layer tree — every layer's bounds, transform, z-order, crop, color, buffer, input region, visibility, and which display it's on — once per frame, into a Perfetto trace. The `com.android.SurfaceFlinger` plugin reads those snapshots back and lets you step through them frame by frame.
+**The layers trace preserves that structure.** SurfaceFlinger can serialize a *snapshot* of its entire layer tree — every layer's bounds, transform, z-order, crop, color, buffer, input region, visibility, and which display it's on — once per frame, into a Perfetto trace. The `com.android.SurfaceFlinger` plugin reads those snapshots back and lets you step through them frame by frame. Alongside the education, this book doubles as the writeup for a concrete contribution to Perfetto: that plugin, plus a one-commit trace_processor fix that lets a layers-only trace open at all (Chapter 5).
 
 This is, historically, what the standalone **Winscope** tool did. The plugin brings that capability *inside* Perfetto, so the layer structure sits on the same timeline as scheduling, CPU frequency, GPU work, frame timelines, and jank — and so you can answer "the app janked at T; what was SurfaceFlinger compositing at T, and why did that layer fall back to GPU?" in one tool. (That cross-timeline workflow is demonstrated step by step in [Chapter 11.9](11-capture-and-explore.md). The original Winscope tool's capabilities and the remaining gaps are catalogued in [Chapter 8](08-reviewers-guide.md), the reviewer's guide.)
 
@@ -114,7 +114,7 @@ Here is the entire journey of one piece of screen structure, from an app drawing
    └──────────────────────────────────────────────────────────────────────┘
 ```
 
-The two on-device halves are independent: composition is what the user sees; tracing is a side-channel that serializes the same layer state SF already computed. Off device, trace_processor turns the proto into queryable tables and the plugin renders them.
+The two on-device halves are independent: composition is what the user sees; tracing is a side-channel that serializes the same layer state SF already computed. Off device, trace_processor turns the proto into queryable tables and the plugin renders them. (*FrontEnd* in the diagram = the part of SurfaceFlinger that owns the layer tree and its per-frame snapshot; Chapter 3 explains why it's split out.)
 
 ---
 

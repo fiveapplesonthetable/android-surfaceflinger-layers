@@ -151,7 +151,7 @@ For each layer, each frame, SF can composite it one of two ways:
 
 The hardware gets the final say, in three steps — **propose → validate → fall back**:
 
-1. SF proposes that layers be DEVICE-composited and writes their state to HWC2 layers.
+1. SF proposes that layers be DEVICE-composited and writes their state into HWC's own per-layer slots (the HAL mirrors each SF layer as an *HWC2 layer*).
 2. SF calls **validateDisplay**; HWC returns **getChangedCompositionTypes** — the layers it *demands* be done as CLIENT instead (because it ran out of planes or can't handle that layer).
 3. SF GPU-renders exactly those layers into the client target, hands that framebuffer to HWC as one CLIENT layer, and HWC presents.
 

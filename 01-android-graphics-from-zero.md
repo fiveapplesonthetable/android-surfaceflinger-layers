@@ -334,7 +334,7 @@ Because everything is a fence, the CPU thread that runs SF never blocks on the G
 
 ## 1.6 BLAST: how an app's frames reach SF today
 
-One modernization is worth knowing, because it explains why "the app's BufferQueue consumer" isn't literally inside SurfaceFlinger anymore. Each window has a **BLASTBufferQueue (BBQ)** living *in the app process*. The app's `Surface` is the producer; **BBQ holds the consumer**. When the app queues a frame, BBQ acquires it and turns it into a **SurfaceFlinger transaction** carrying the buffer (`setBuffer`), applied to the window's `SurfaceControl`:
+Earlier I described the consumer as living in SurfaceFlinger — that's the classic design and still the right mental model. One modern refinement moves the consumer *object* into the app process while keeping that producer→queue→consumer model intact, and it's worth knowing because it explains how an app's frames actually reach SF today. Each window has a **BLASTBufferQueue (BBQ)** living *in the app process*. The app's `Surface` is the producer; **BBQ holds the consumer**. When the app queues a frame, BBQ acquires it and turns it into a **SurfaceFlinger transaction** carrying the buffer (`setBuffer`), applied to the window's `SurfaceControl`:
 
 ```cpp
 // libs/gui/BLASTBufferQueue.cpp:589, :656

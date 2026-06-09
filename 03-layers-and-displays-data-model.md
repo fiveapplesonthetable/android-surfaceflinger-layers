@@ -75,6 +75,8 @@ The actual comparator — note the precedence **layer stack, then z, then id**:
     return lhsLayer->id < rhsLayer->id;
 ```
 
+Flattening that traversal top-to-bottom gives each layer a **draw index** within its layer stack — its position in paint order, which is distinct from its `z` value. The trace records this as each rect's `depth` (Chapter 5), and the plugin stacks the 3D rects along it (Chapter 7).
+
 ### Relative-Z
 
 `setRelativeLayer(relativeTo, z)` makes a layer sit at z **relative to a different layer**, not its parent. In the graph the layer becomes a child of *two* nodes: its real parent (now marked `Detached`, so normal traversal skips it) and its relative parent (added as `Relative`):

@@ -122,4 +122,6 @@ System UI drew a 720×48 black bar into its Surface → BLAST turned the queued 
 
 Every arrow in that sentence is a chapter, and every number in this one was a real query against the trace.
 
+That closes the layers pipeline. The remaining chapters widen the lens: the *input* side that produced this tree (transactions), and how to capture and explore it all yourself.
+
 [« Chapter 8](08-reviewers-guide.md)  ·  [Chapter 10 — Transactions & the other Winscope viewers »](10-transactions-and-other-viewers.md)
