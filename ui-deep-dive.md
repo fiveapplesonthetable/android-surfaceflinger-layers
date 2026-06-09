@@ -17,7 +17,7 @@ index.ts ─ registers the page (surfaceflinger_page) + per-display tracks (surf
    data: surfaceflinger_data.ts (SQL), route: surfaceflinger_route.ts, styles: surfaceflinger.scss
 ```
 
-Eleven files. Dependency-free except on Perfetto's public widgets and `base/assert`.
+Eleven files. The plugin depends only on Perfetto's own modules — `public/*` (plugin/trace/track APIs), `widgets/*` (Section, Tree, Chip, DataGrid, Checkbox, Select, TextInput, Button), `components/*` (the DataGrid, `tracks/slice_track`, `colorizer`, `widgets/timestamp`), `trace_processor/*` (`engine`, `query_result`, `dataset`), and `base/*` (`assert`, `time`) — and `mithril`. No third-party graphics/UI libraries (the 3D rects are hand-rolled 2D canvas).
 
 ---
 
@@ -35,7 +35,15 @@ export function sqlInt(value: string): string {
 
 **`queryDisplays`** — `GROUP BY display_id`, `MAX(tr.group_id)` read as `NUM_NULL` so a rect-less display yields `group: undefined` (not aliased to real group 0). `display_id` read as `LONG`, stored `.toString()` (int64-safe).
 
-**`querySnapshots(displayId)`** — `SELECT id, ts ... WHERE display_id = ${sqlInt(displayId)} ORDER BY ts`; `id` as `NUM`, `ts` as `LONG`.
+**`querySnapshots(displayId)`** — note it does *not* filter the snapshot table on `display_id` directly (snapshots are global); it filters by membership in the display table:
+```sql
+SELECT s.id AS sid, s.ts AS ts
+FROM __intrinsic_surfaceflinger_layers_snapshot s
+WHERE s.id IN (SELECT snapshot_id FROM __intrinsic_surfaceflinger_display
+               WHERE display_id = ${sqlInt(displayId)})
+ORDER BY s.ts
+```
+`sid` as `NUM`, `ts` as `LONG`.
 
 **`queryLayers(snapshotId)`** — the wide LEFT-JOIN (Chapter 5.7). Per-row mapping notes:
 - `layerId`, `parent`, `zrel`, `hwc` read as `LONG` then `Number(...)` (they're small).
@@ -208,7 +216,7 @@ Translate to canvas coords; first test `labelHit` bands (a click in the gutter s
 ---
 
 ## 5. `surfaceflinger_curated.ts`
-`buildArgMaps(args)` → `{byKey, byFlat}` (by full key, and by flat key for repeated/array fields). Helpers: `s(byKey,key)` (formatted scalar), `rect(p)` → `(l, t) – (r, b)`, `color(p)` → `r:.. g:.. b:.. α:..`, `corners(arrayPrefix, scalarKey)` → `(tl, tr, bl, br)` with a scalar fallback, `px(key)` → `"<v> px"`, `transform(p)` → two matrix rows, `push(rows,label,value)` (skips empty). `curatedProperties(layer, args, layerName)` builds the sections in order: **Visibility** (visible; invisible-due-to from `visibility_reason[*]`; `occluded_by`/`partially_occluded_by`/`covered_by` as `layerRefs` for clickability; flags), **Geometry** (Z, layer stack, Z-relative-to, bounds, screen bounds, crop, destination frame, transform, requested transform), **Buffer** (active buffer w×h/stride/format, buffer transform, dataspace, frame number, HWC composition), **Color & effects** (color, requested color, corner radii, corner-radius crop, shadow/background-blur in `px`), **Input** (focusable, touchable region, input transform, input config, crop layer, replace-touch-with-crop). Empty sections are dropped.
+`buildArgMaps(args)` → `{byKey, byFlat}` (by full key, and by flat key for repeated/array fields). Helpers: `s(byKey,key)` (formatted scalar), `rect(p)` → `(l, t) – (r, b)`, `color(p)` → `r:.. g:.. b:.. α:..`, `corners(arrayPrefix, scalarKey)` → `(tl, tr, bl, br)` with a scalar fallback, `px(key)` → `"<v> px"`, `transform(p)` → two matrix rows, `push(rows,label,value)` (skips empty). `curatedProperties(layer, args, layerName)` builds the sections in order: **Visibility** (visible; invisible-due-to from `visibility_reason[*]`; `occluded_by`/`partially_occluded_by`/`covered_by` as `layerRefs` for clickability; flags), **Geometry** (Z, layer stack, Z-relative-to, bounds, screen bounds, crop, destination frame, transform, requested transform), **Buffer** (active buffer w×h/stride/format, buffer transform, dataspace, frame number, HWC composition), **Color & effects** (color, requested color, corner radii, requested corner radii, corner-radius crop, shadow radius, background blur — the last two in `px`), **Input** (focusable, touchable region, input transform, input config, crop layer, replace-touch-with-crop). Empty sections are dropped.
 
 ---
 

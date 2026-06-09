@@ -187,10 +187,12 @@ struct matrix22_t { float dsdx{0}; float dtdx{0}; float dtdy{0}; float dsdy{0}; 
 and the translation `(tx, ty)` is the layer's `(x, y)`. Together they map a layer-space point to screen space:
 
 ```
-| dsdx  dsdy  tx |   | x |   | dsdx*x + dsdy*y + tx |
-| dtdx  dtdy  ty | · | y | = | dtdx*x + dtdy*y + ty |
+| dsdx  dtdx  tx |   | x |   | dsdx·x + dtdx·y + tx |
+| dtdy  dsdy  ty | · | y | = | dtdy·x + dsdy·y + ty |
 |  0     0    1  |   | 1 |
 ```
+
+(SurfaceFlinger's naming is its own, not the textbook one: `dsdx`/`dsdy` are the two terms that produce the **x** output, `dtdx`/`dtdy` the two that produce the **y** output. The exact pairing — `dsdx`,`dtdx` on the x row; `dtdy`,`dsdy` on the y row — is what the code computes: `Transform::transform()` in `libs/ui/Transform.cpp` returns `r[0] = dsdx·x + dtdx·y + tx`, `r[1] = dtdy·x + dsdy·y + ty`. The plugin's `apply()` (Chapter 7.3) and trace_processor's `TransformMatrix` use this identical form, so it's the same equation from the device all the way to the rects view.)
 
 The world transform is the parent's transform composed with the local one:
 ```cpp

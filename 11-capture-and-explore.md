@@ -109,6 +109,44 @@ The plugin is themed entirely with Perfetto's CSS variables, and the canvas read
 - **Timeline → page:** click a snapshot slice → its details panel → **Open in SurfaceFlinger viewer** → the page opens on that frame.
 - **Page → timeline:** the **Timeline** button selects that snapshot's slice on the display's track and scrolls to it.
 
-Because both surfaces read one shared session and show the snapshot index + timestamp identically, you can move between the quick timeline peek and the deep page without losing your place. That's the whole point: layer structure, on the same timeline as everything else Perfetto knows about the frame.
+Because both surfaces read one shared session and show the snapshot index + timestamp identically, you can move between the quick timeline peek and the deep page without losing your place.
+
+---
+
+## 11.9 The payoff: correlate a jank with composition
+
+This is the reason the layer structure belongs *inside* Perfetto rather than in a separate tool. Capture layers **alongside** the frame timeline and scheduling, and you can go from "the screen stuttered" to "this specific layer fell back to GPU and blew the budget" on one timeline.
+
+Capture more than just layers:
+
+```
+buffers { size_kb: 65536 }
+duration_ms: 8000
+# the layer structure (this book)
+data_sources { config { name: "android.surfaceflinger.layers"
+  surfaceflinger_layers_config { mode: MODE_ACTIVE
+    trace_flags: TRACE_FLAG_COMPOSITION trace_flags: TRACE_FLAG_INPUT } } }
+# the frame timeline: expected vs actual present, and jank classification
+data_sources { config { name: "android.surfaceflinger.frametimeline" } }
+# scheduling + key atrace categories, so you can see where the time went
+data_sources { config { name: "linux.ftrace"
+  ftrace_config { ftrace_events: "sched/sched_switch"
+    atrace_categories: "gfx" atrace_categories: "view" atrace_categories: "sf" } } }
+```
+
+`android.surfaceflinger.frametimeline` adds the **Expected Timeline** and **Actual Timeline** tracks (per process and for SurfaceFlinger): each frame is a slice spanning when it *should* have presented vs when it *did*, and slices are **colored by jank type** (e.g. an app missed its deadline, or SF did, or a buffer was stuffed). The vsync-deadline model from Chapter 1.5 is exactly what these tracks visualize — a jank slice is a stage that overran its period.
+
+The workflow:
+
+1. **Find the jank.** On the **Actual Timeline** track, spot a red/janked frame slice. Click it — the details show the jank type and the frame's start/end timestamps `T`.
+2. **Cross to composition.** Expand the **SurfaceFlinger** group and find the snapshot slice at (or just before) `T` on the display's track — they share the trace's clock, so they line up vertically. Click it → **Open in SurfaceFlinger viewer** (or use the page and scrub to `T`).
+3. **Read the cause.** In the viewer at that frame: turn on the **Hierarchy** and look for layers with a **GPU** chip (`hwc_composition_type = CLIENT`) that you'd expect to be cheap **HWC** overlays. A layer that flipped to GPU — because of HDR/tone-mapping, a non-90° rotation, a shadow, or simply HWC running out of overlay planes (Chapter 2.5) — is a prime suspect for the extra composition time that pushed SF past its vsync deadline. The **Surface** view shows *how many* layers are stacked (more layers → more overlay pressure → more GPU fallback), and the **Properties** pane shows the offending layer's dataspace/transform/shadow so you can see *why* it fell back.
+4. **Confirm the cost.** With `gfx`/`sf` atrace on, the SurfaceFlinger composition slices on the timeline at `T` show the actual GPU/composition duration — line that up against the refresh period to confirm it's what overran.
+
+That chain — **Actual Timeline jank → the SF snapshot at that instant → the specific GPU-composited layer → why it fell back** — is the professional jank-analysis loop, and it only works because the layer structure is on the same timeline as the frame timeline and the scheduler. (For the scheduling side of *why* a stage missed its deadline — thread priorities, `SCHED_DEADLINE`, the vsync offsets — see Balsini's LWN article linked in Chapter 1.5 and the [Further reading](README.md#further-reading).)
+
+> Honest note: whether you *see* jank depends on the trace — an idle or lightly-loaded device may present every frame on time, so the Actual Timeline is all "on-time" green. To force interesting frames, capture while scrolling a heavy list, launching an app, or playing video (which also gives you HDR/GPU-fallback layers to find).
+
+That's the whole point: layer structure, on the same timeline as everything else Perfetto knows about the frame.
 
 [« Chapter 10](10-transactions-and-other-viewers.md)  ·  [README](README.md)  ·  [UI deep-dive (line-by-line) »](ui-deep-dive.md)

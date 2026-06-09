@@ -262,6 +262,16 @@ With diff on, the proto grid gains a **Previous** column showing the prior snaps
 
 ---
 
+## 7.6b `surfaceflinger_route.ts` — the one constant
+
+The eleventh file is a one-liner, but it earns a mention because two surfaces must agree on it: it exports the page's route string.
+
+```ts
+export const SURFACEFLINGER_ROUTE = '/surfaceflinger';
+```
+
+`index.ts` registers the page at this route and the sidebar item links to `#!${SURFACEFLINGER_ROUTE}`; `surfaceflinger_page.ts`'s jump-to-timeline navigates relative to it. Keeping it in one place is why a future rename can't desync the page from its links.
+
 ## 7.7 `index.ts` — discovery & wiring
 
 The plugin class:

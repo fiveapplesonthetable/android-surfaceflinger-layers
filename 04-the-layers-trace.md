@@ -111,12 +111,14 @@ message TransformProto {
 }
 ```
 
-The four floats are the **2×2 linear part** of the affine matrix:
+The four floats are the **2×2 linear part** of the affine matrix. The naming is SurfaceFlinger's own (the `s`/`t` come from its `Transform` class), and the pairing is what the code actually computes — `x' = dsdx·x + dtdx·y`, `y' = dtdy·x + dsdy·y`:
 
 ```
-| dsdx  dsdy |     "s" = the x-like output coord, "t" = the y-like output coord.
-| dtdx  dtdy |     dsdx = ∂(out x)/∂(in x), dtdx = ∂(out y)/∂(in x), etc.
+| dsdx  dtdx |   produces:  x' = dsdx·x + dtdx·y   (+ tx)
+| dtdy  dsdy |              y' = dtdy·x + dsdy·y   (+ ty)
 ```
+
+This is the exact form `Transform::transform()` (`libs/ui/Transform.cpp`), the trace_processor matrix, and the plugin's `apply()` (Chapter 7.3) all use — so don't read `dsdy` as "the x-from-y term" by analogy; trust the equation above. (`dsdx`/`dsdy` are the diagonal scale terms when there's no rotation; `dtdx`/`dtdy` are the off-diagonal shear/rotation terms.)
 
 **Translation `tx`/`ty` are NOT in `TransformProto`.** They're carried separately in the layer's `position` (`PositionProto`), filled from `transform.tx()/ty()` (`LayerProtoHelper.cpp:444`). So to reconstruct a layer's full matrix you combine `TransformProto` (linear) + `position` (translate). *(The plugin's `__intrinsic_winscope_transform` table re-unifies them into one 6-float `{dsdx,dtdx,tx,dtdy,dsdy,ty}` row — Chapter 5.)*
 

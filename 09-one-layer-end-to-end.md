@@ -49,7 +49,7 @@ The status bar is composited onto CrosvmDisplay because their layer stacks match
 
 In parallel with compositing, `LayerTracing` serializes snapshot 0 — all 89 layers plus the CrosvmDisplay — into a `LayersSnapshotProto`, and emits it as **one `TracePacket` with field 93 set** (`trace_packet.proto:231`), timestamped on `CLOCK_MONOTONIC` at `49246683941682`.
 
-Inside that proto, layer 75 is one `LayerProto` with (Chapter 4.2): `id = 75`, `name = "StatusBar#75"`, `layer_stack = 9` → 0, `z = 10` → 0, `hwc_composition_type = 35` → `HWC_TYPE_DEVICE`, `color = 20` → {0,0,0,1}, `bounds = 45` → {0,0,720,48}, and a `transform = 23` whose `type` encodes IDENTITY (so its four matrix floats are omitted and default to the identity, Chapter 4.4). That's the wire form.
+Inside that proto, layer 75 is one `LayerProto`. Using the form *fieldname (proto field number) = value* (Chapter 4.2): `id (1) = 75`, `name (2) = "StatusBar#75"`, `layer_stack (9) = 0`, `z (10) = 0`, `hwc_composition_type (35) = HWC_TYPE_DEVICE`, `color (20) = {0,0,0,1}`, `bounds (45) = {0,0,720,48}`, and a `transform (23)` whose `type` encodes IDENTITY (so its four matrix floats are omitted and default to the identity, Chapter 4.4). That's the wire form.
 
 ---
 

@@ -273,6 +273,21 @@ int SurfaceFlinger::calculateMaxAcquiredBufferCount(Fps refreshRate,
 
 The display refreshes at fixed instants — vsync. SurfaceFlinger does not poll; it is woken once per vsync by the scheduler (the HAL vsync entry is `SurfaceFlinger.cpp:2452`, `onComposerHalVsync`). Apps schedule their drawing one vsync ahead of the present they're targeting via **Choreographer** (`libs/gui/Choreographer.cpp`), which is fed by a `DisplayEventReceiver`/`DisplayEventDispatcher`. The full SF wake→commit→composite loop is Chapter 2; here we care about one step of it: **latching**.
 
+### vsync offsets and the pipeline (why a frame takes ~3 refreshes)
+
+There isn't *one* vsync signal handed to everyone at the same instant. The scheduler (historically `DispSync`) broadcasts vsync to the **app** and to the **SurfaceFlinger main thread** at *different, deliberately staggered offsets* — call them **VSYNC-app** and **VSYNC-sf**. The app gets its tick first and has (ideally) a full refresh period to render; SurfaceFlinger's tick is delayed so that by the time SF wakes, the app's frame is finished and waiting. That stagger is what lets the two run back-to-back instead of fighting for the same slice of time.
+
+The payoff is a **pipeline**. Think of three stages — the app renders frame N, SF composites the previous frame, the display scans out the one before that — each given its own refresh period and running *simultaneously* on *different* frames:
+
+```
+ refresh period:     │   T   │  T+1  │  T+2  │  T+3  │
+ App (render)        │  N    │  N+1  │  N+2  │  N+3  │
+ SurfaceFlinger      │       │   N   │  N+1  │  N+2  │   ← composites one frame behind the app
+ Display (scan-out)  │       │       │   N   │  N+1  │   ← shows one frame behind SF
+```
+
+So a frame the app starts at T is on screen at roughly T+2 — **a few refreshes of latency** — but a *new* finished frame appears every refresh (smooth throughput). This is the same latency-vs-smoothness trade as triple buffering (§1.4), now at the scheduling level: the extra buffers exist precisely to keep this pipeline full. If any stage overruns its period, a frame is **skipped** — that's jank, and it's why "did a stage miss its vsync deadline?" is *the* question in frame-timing analysis (Chapter 11.9 shows how to answer it from a trace). For the full scheduling story — `DispSync`, the offsets, and the kernel-scheduling work behind them — Alessio Balsini's [*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/) (LWN, 2020) is the canonical read; this book is, in part, the structural companion that makes that article easy to follow.
+
 ### Latching = choosing which queued buffer to show this frame
 
 Each vsync, for each layer with a ready frame, SF "latches" a buffer — binds the chosen queued buffer as the layer's current content for this frame. The latch is gated on the buffer's **acquire fence**: SF will not latch (and not composite) until the GPU has actually finished drawing it.

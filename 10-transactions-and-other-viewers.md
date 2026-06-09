@@ -53,7 +53,7 @@ The interesting nested message is `LayerState` (`surfaceflinger_transactions.pro
 
 The layers config has a `MODE_GENERATED` (Chapter 4.5) that **reconstructs layer snapshots from the transaction stream** — it replays the transaction ring buffer through SF's front-end logic. The engine is `LayerTraceGenerator`:
 
-> "Generates layer traces from transaction traces… The transactions are parsed from proto and applied to recreate the layer state. The result is then written as a layer trace." — `Tracing/tools/readme.md:1`
+> "Generates layer traces from transaction traces… The transactions are parsed from proto and applied to recreate the layer state. The result is then written as a layer trace." — `Tracing/tools/readme.md:3`
 
 So transactions are the source of truth, and layers snapshots can be *derived* from them. That's the deep link between the two sources.
 
@@ -64,7 +64,8 @@ So transactions are the source of truth, and layers snapshots can be *derived* f
 __intrinsic_surfaceflinger_transactions     # one row per committed batch: ts, arg_set_id,
                                             #   base64_proto_id, vsync_id
 __intrinsic_surfaceflinger_transaction      # one row per individual effect: snapshot_id,
-                                            #   transaction_id, pid, uid, layer_id, display_id,
+                                            #   arg_set_id, base64_proto_id, transaction_id,
+                                            #   pid, uid, layer_id, display_id,
                                             #   flags_id, transaction_type
 __intrinsic_surfaceflinger_transaction_flag # decoded `what` bits: flags_id, flag (string)
 ```
@@ -91,7 +92,7 @@ Winscope isn't only SurfaceFlinger. The same trace_processor module parses six d
 Two structural notes:
 
 - **One module.** All of these are parsed by a single `WinscopeModule` (`winscope_module.cc`), which registers for the top-level fields (93, 94, 96, 97, 104, 105) and a `WinscopeExtensions` field (112) that *packs* the newer domains (IME, ViewCapture, WindowManager, input events) as sub-fields, demuxed in `ParseWinscopeExtensionsData`. So adding a domain didn't require a new top-level packet field each time.
-- **Same pattern as SF layers.** Each domain's snapshot table has the same `ts` / `arg_set_id` / `base64_proto_id` triple you learned in Chapter 5 — a timestamp, the flattened proto as args, and the interned raw bytes. So everything you know about reading the SF layers tables transfers directly.
+- **Same pattern as SF layers.** Each domain's *snapshot* table has the same `ts` / `arg_set_id` / `base64_proto_id` triple you learned in Chapter 5 — a timestamp, the flattened proto as args, and the interned raw bytes — so everything you know about reading the SF layers tables transfers directly. (The one exception is **ProtoLog**, whose `__intrinsic_protolog` is a per-*message* table with typed columns `ts, level, tag, message, stacktrace, location` instead of the args/base64 pair — it's log lines, not proto snapshots.)
 
 ### Why "ViewCapture" matters for the SF plugin's limitations
 

@@ -36,7 +36,7 @@ The chapters build on each other, but each is self-contained enough to read alon
 | — | [UI deep-dive (line-by-line)](ui-deep-dive.md) | The exhaustive companion to Ch. 7 — every algorithm in the plugin, in full. |
 | — | [Glossary](glossary.md) | Every term in one place. |
 
-If you only want the **Android graphics education**, read 1→2→3. If you only want the **trace/plugin engineering**, read 4→5→7→8. If you're reviewing the change, read 5, 7, 8.
+Suggested paths: for the **Android graphics education**, read 1→2→3 (then 9 for a worked example). For the **trace/plugin engineering**, read 4→5→7 (then the [UI deep-dive](ui-deep-dive.md)) →8. If you're **reviewing the change**, read 5, 7, 8. If you just want to **use it**, jump to [Chapter 11](11-capture-and-explore.md) and keep [Chapter 9](09-one-layer-end-to-end.md) (one real layer, end to end) and the [glossary](glossary.md) open beside it.
 
 ---
 
@@ -51,7 +51,7 @@ So the screen you see is the *output* of compositing. It throws away the structu
 
 **The layers trace preserves that structure.** SurfaceFlinger can serialize a *snapshot* of its entire layer tree — every layer's bounds, transform, z-order, crop, color, buffer, input region, visibility, and which display it's on — once per frame, into a Perfetto trace. The `com.android.SurfaceFlinger` plugin reads those snapshots back and lets you fly through them.
 
-This is, historically, what the standalone **Winscope** tool did. The plugin brings that capability *inside* Perfetto, so the layer structure sits on the same timeline as scheduling, CPU frequency, GPU work, frame timelines, and jank — and so you can answer "the app janked at T; what was SurfaceFlinger compositing at T, and why did that layer fall back to GPU?" in one tool. (Chapter 8 of the original Winscope tool's capabilities and the honest remaining gaps are catalogued in the reviewer's guide.)
+This is, historically, what the standalone **Winscope** tool did. The plugin brings that capability *inside* Perfetto, so the layer structure sits on the same timeline as scheduling, CPU frequency, GPU work, frame timelines, and jank — and so you can answer "the app janked at T; what was SurfaceFlinger compositing at T, and why did that layer fall back to GPU?" in one tool. (That cross-timeline workflow is demonstrated step by step in [Chapter 11.9](11-capture-and-explore.md). The original Winscope tool's capabilities and the honest remaining gaps are catalogued in [Chapter 8](08-reviewers-guide.md), the reviewer's guide.)
 
 ---
 
@@ -65,15 +65,17 @@ Here is the entire journey of one piece of screen structure, from an app drawing
    │                                                                     │
    │  App process                          SurfaceFlinger process        │
    │  ───────────                          ─────────────────────         │
-   │  draw into a Surface  ──dequeue──►  ┌──────────────┐                 │
-   │  (Canvas / GPU)        a buffer     │ BufferQueue  │  ── Ch.1        │
-   │       │                             │ (per layer)  │                 │
-   │       └──queue the buffer + fence──►└──────┬───────┘                 │
-   │                                            │ acquire (latch)         │
-   │                                            ▼                         │
+   │  draw into a Surface ─dequeue─► ┌─────────────┐                      │
+   │  (Canvas / GPU)       a buffer  │ BufferQueue  │ (the consumer is    │
+   │       │                         │  + BLAST     │  BBQ, in the app    │
+   │       └─queue buffer + fence──► │ (BBQ)        │  process)  ── Ch.1  │
+   │                                 └──────┬──────┘                      │
+   │                                        │ setBuffer transaction       │
+   │  ──────────────────────────────────────┼──── process boundary ──────│
+   │                                        ▼                             │
    │                                     ┌──────────────┐                 │
    │   each vsync:  commit ──► latch ──► │  Layer tree  │  ── Ch.2, Ch.3  │
-   │                                     │  (FrontEnd)  │                 │
+   │   (apply transactions)              │  (FrontEnd)  │                 │
    │                                     └──────┬───────┘                 │
    │                                            │ composite               │
    │                                            ▼                         │
@@ -130,5 +132,16 @@ You can read Chapter 1 cold, but these eight words recur everywhere, so here are
 ## 3. A note on accuracy and honesty
 
 Where the source is unambiguous, this book quotes it. Where something is version-specific (SurfaceFlinger has been heavily rearchitected — there is now a "FrontEnd" that owns the tree and a slim legacy `Layer` that owns the buffer pipeline), the book says so rather than pretend there's one timeless design. Where the plugin has **limitations** (things the standalone Winscope does that it doesn't yet, because they need data a layers-only trace doesn't carry), Chapter 8 lists them plainly. The goal is understanding you can trust, not marketing.
+
+## Further reading
+
+This book is the *structural* companion to a few canonical sources — read them after (or alongside) it and they should be much easier to follow:
+
+- **Alessio Balsini, [*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/)** (LWN.net, 2020), with [figures](https://lwn.net/Articles/809547/). The scheduling side of everything in Chapters 1–2: the app→SurfaceFlinger→display pipeline, the **VSYNC offsets** (`DispSync`, VSYNC-app vs VSYNC-sf), why a frame takes ~3 refreshes, and the kernel-scheduling work (`SCHED_DEADLINE`) behind hitting deadlines. If Chapter 1.5 made sense, this article will read easily.
+- **[android-display-video-pipeline](https://github.com/fiveapplesonthetable/android-display-video-pipeline)** — the *pixels* sibling of this book (encoding the screen to video in a trace). Chapter 6 explains how the two relate.
+- **Perfetto docs** — [trace_processor](https://perfetto.dev/docs/analysis/trace-processor) and the [UI plugin](https://perfetto.dev/docs/contributing/ui-plugins) guide, for the machinery Chapters 5 and 7 build on.
+- **AOSP source** — `frameworks/native/services/surfaceflinger/` (SF) and `frameworks/native/libs/gui/` (BufferQueue/BLAST); every citation in this book points into these.
+
+---
 
 Now: [Chapter 1 — Android graphics from zero »](01-android-graphics-from-zero.md)

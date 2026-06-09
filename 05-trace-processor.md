@@ -61,7 +61,9 @@ Note the transform table **reunifies** the linear part (`dsdx…`) with the tran
 # __intrinsic_winscope_trace_rect
 C('rect_id', CppTableId(WINSCOPE_RECT_TABLE)),     # FK -> the (x,y,w,h)
 C('group_id', CppUint32()),                        # = layer_stack (the display grouping)
-C('depth', CppUint32()),                           # draw order within the group (z)
+C('depth', CppUint32()),                           # sequential DRAW INDEX within the group
+                                                   #   (a monotonic counter, NOT the layer's z;
+                                                   #   the source var is confusingly named absolute_z)
 C('is_spy', CppInt64()),
 C('is_visible', CppInt64()),
 C('opacity', CppOptional(CppDouble())),
@@ -233,7 +235,7 @@ std::pair<int64_t, int64_t> GetTimestampBounds() override {
 + C('ts', CppInt64(), ColumnFlag.SORTED, cpp_access=CppAccess.READ),
 ```
 
-Without `cpp_access=CppAccess.READ`, `it.ts()` wouldn't exist and `winscope_importer.cc` wouldn't compile. So the importer change and the `winscope_tables.py` change are **one coupled fix**.
+Without `cpp_access=CppAccess.READ`, `it.ts()` wouldn't exist and `winscope_importer.cc` wouldn't compile. So the importer change and the `winscope_tables.py` change are **one coupled fix**. (The bounds loop iterates *nine* winscope snapshot tables, but only *seven* needed this edit — two of them, shell-transitions and ProtoLog, already declared their `ts` C++-readable upstream.)
 
 ### Why this lives in the importer, not the UI plugin or the generic table plugin
 

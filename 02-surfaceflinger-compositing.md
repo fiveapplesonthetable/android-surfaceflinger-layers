@@ -190,7 +190,7 @@ void Display::applyCompositionStrategy(const std::optional<DeviceRequestedChange
        return !state.hwc || state.hwc->hwcCompositionType == Composition::CLIENT;
    }
    ```
-2. **SF forced it** (`forceClientComposition`) — SF itself knows HWC can't (or shouldn't) overlay this layer. Reasons include a **secure layer on a non-secure output**, an **invalid (non-90°) rotation** (`OutputLayer.cpp:359`), a **dataspace HWC can't handle**, or a **per-layer color transform HWC rejected** (`OutputLayer.cpp:443`, `:712`). Shadows and some effects also force it.
+2. **SF forced it** (`forceClientComposition`) — SF itself knows HWC can't (or shouldn't) overlay this layer. Reasons include a **secure layer on a non-secure output**, an **invalid (non-90°) rotation** (`OutputLayer.cpp:359`), a **dataspace HWC can't handle**, or a **per-layer color transform HWC rejected** (`OutputLayer.cpp:443`, `:712`). Shadows and some effects also force it. A common real-world trigger is **HDR / wide-gamut content that needs tone-mapping** the display can't do in hardware — SF then GPU-composites that layer to map it into the display's color space. So when you see a video or HDR photo layer show `HWC_TYPE_CLIENT` in the trace while everything around it is `DEVICE`, this is usually why.
 
 ### The GPU render
 
