@@ -1,11 +1,15 @@
 # SurfaceFlinger, from zero — and how to see every layer in a Perfetto trace
 
-This is a long, deliberately-from-scratch book about two things:
+The screen on your phone is a composite: a dozen independent programs each draw into their own buffer, and one system process flattens them into the single image you see — 60 to 120 times a second. That flattening throws the structure away. Once it's pixels, you can't ask *which surface is that, how big is it, is it occluded, what's behind it.* This book is about that structure — how Android builds it, how a trace preserves it, and how a tool lets you get it back.
+
+It's long and deliberately from-scratch, covering two things:
 
 1. **How Android actually puts a frame on the screen.** What an app's "Surface" really is, how pixels get from an app into a buffer, how that buffer reaches the system compositor (**SurfaceFlinger**), what double/triple buffering and vsync and fences are *for*, and how SurfaceFlinger composites many layers across one or more displays into the image you see.
 2. **How that whole structure is captured into a Perfetto trace, and how a new Perfetto UI plugin (`com.android.SurfaceFlinger`) lets you inspect it** — every layer, its geometry, its z-order, what's visible, what's occluded, on which display — scrubbing frame by frame, in light or dark mode, right next to your CPU/GPU/jank tracks.
 
 It is written for someone who knows **nothing** about Android graphics. By the end you should understand the system well enough to (a) reason about jank and composition at a professional level, and (b) read, modify, and review the plugin's code line by line.
+
+A concrete litmus test for "did this work": Alessio Balsini's classic LWN article **[*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/)** is dense if you're new to this — it assumes you already know what a Surface, a BufferQueue, SurfaceFlinger, vsync offsets, and the render pipeline are. **This book is the on-ramp that makes that article an easy read.** Chapters 1–2 build exactly the vocabulary and the pipeline model it relies on (Chapter 1.5 covers its VSYNC-app/VSYNC-sf offsets directly); afterwards, go read it — it should click.
 
 It is the SurfaceFlinger sibling of [android-display-video-pipeline](https://github.com/fiveapplesonthetable/android-display-video-pipeline), which covered the *pixels* side (encoding the screen to video in a trace). This book covers the *structure* side (the layers), and [Chapter 6](06-two-views-layers-vs-video.md) explains exactly how the two relate.
 
@@ -65,11 +69,11 @@ Here is the entire journey of one piece of screen structure, from an app drawing
    │                                                                     │
    │  App process                          SurfaceFlinger process        │
    │  ───────────                          ─────────────────────         │
-   │  draw into a Surface ─dequeue─► ┌─────────────┐                      │
-   │  (Canvas / GPU)       a buffer  │ BufferQueue  │ (the consumer is    │
-   │       │                         │  + BLAST     │  BBQ, in the app    │
-   │       └─queue buffer + fence──► │ (BBQ)        │  process)  ── Ch.1  │
-   │                                 └──────┬──────┘                      │
+   │                                 ┌─────────────┐                      │
+   │  draw into a Surface ◄─dequeue──│ BufferQueue │ (the consumer is     │
+   │  (Canvas / GPU)                 │  + BLAST    │  BBQ, lives in       │
+   │  ──queue buffer + fence────────►│  (BBQ)      │  the app process     │
+   │                                 └──────┬──────┘            ── Ch.1   │
    │                                        │ setBuffer transaction       │
    │  ──────────────────────────────────────┼──── process boundary ──────│
    │                                        ▼                             │
@@ -116,7 +120,7 @@ The two on-device halves are independent: composition is what the user sees; tra
 
 ## 2. The vocabulary you need first
 
-You can read Chapter 1 cold, but these eight words recur everywhere, so here are one-line definitions to anchor them. The [glossary](glossary.md) has the rest.
+You can start Chapter 1 without these, but these eight words recur everywhere, so here are one-line definitions to anchor them. The [glossary](glossary.md) has the rest.
 
 - **Surface** — an app-side handle you draw into. Concretely, an `ANativeWindow` backed by a producer endpoint of a BufferQueue (`Surface.h:107`). *Not* the thing SF calls a layer.
 - **Layer** — SurfaceFlinger's unit of composition: one piece of content plus its geometry, z-order, and state. Layers form a tree. A Surface's content becomes a layer's buffer.

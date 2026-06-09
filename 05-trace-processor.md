@@ -8,7 +8,7 @@ Paths under `/mnt/agent/tmp/perfetto-vf` (branch `dev/zezeozue/winscope`).
 
 ## 5.1 The big picture
 
-trace_processor is a C++/WASM library that loads a trace and exposes SQL. For SurfaceFlinger layers there are three pieces:
+trace_processor is a C++ library that loads a trace and exposes SQL. It's also compiled to **WASM** (WebAssembly), so the exact same code runs inside the browser — that's how the Perfetto web UI queries a trace locally with no server, and why every query from the UI is an async round-trip (Chapter 7). For SurfaceFlinger layers there are three pieces:
 
 1. **Intrinsic tables** — declared in `src/trace_processor/tables/winscope_tables.py`, from which C++ table classes (`tables::SurfaceFlingerLayerTable`, …) and SQL names (`__intrinsic_surfaceflinger_layer`, …) are generated.
 2. **The importer** — `src/trace_processor/plugins/winscope_importer/`, a proto-importer module that decodes each packet and inserts rows.
@@ -16,7 +16,7 @@ trace_processor is a C++/WASM library that loads a trace and exposes SQL. For Su
 
 Two cross-cutting tricks you'll see on every row:
 
-- **`base64_proto_id`** — the raw proto bytes of a snapshot/layer, base64-encoded and interned into trace_processor's global **string pool**, so identical blobs share one id. The UI fetches the original proto by this id. (It's a string-pool id, not a foreign key.) Because identical protos collapse to one id, **comparing two layers' `base64_proto_id` is an exact "did anything change?" test** — the plugin uses this for its diff (Chapter 7).
+- **`base64_proto_id`** — the raw proto bytes of a snapshot/layer, base64-encoded and **interned** into trace_processor's global **string pool**. *Interning* means storing each distinct value once in a shared table and handing back a small integer id; equal values get the same id, so identical blobs share one id. The UI fetches the original proto by this id. (It's a string-pool id, not a foreign key.) Because identical protos collapse to one id, **comparing two layers' `base64_proto_id` is an exact "did anything change?" test** — the plugin uses this for its diff (Chapter 7).
 - **`arg_set_id`** — the whole proto is *also* flattened field-by-field into the generic `args` table. `arg_set_id` groups all args of one row, so the UI can show every proto field as key/value without a column per field.
 
 ---
@@ -102,7 +102,7 @@ C('layer_rect_id', CppOptional(CppTableId(WINSCOPE_TRACE_RECT_TABLE))),  # the l
 C('input_rect_id', CppOptional(CppTableId(WINSCOPE_TRACE_RECT_TABLE))),  # the input frame rect (nullable)
 ```
 
-The `cpp_access=CppAccess.READ` on `ts` is load-bearing — without it the bounds fix wouldn't compile (§5.6).
+The `cpp_access=CppAccess.READ` on `ts` is required — without it the bounds fix wouldn't compile (§5.6).
 
 ---
 

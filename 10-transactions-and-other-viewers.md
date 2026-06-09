@@ -91,7 +91,7 @@ Winscope isn't only SurfaceFlinger. The same trace_processor module parses six d
 
 Two structural notes:
 
-- **One module.** All of these are parsed by a single `WinscopeModule` (`winscope_module.cc`), which registers for the top-level fields (93, 94, 96, 97, 104, 105) and a `WinscopeExtensions` field (112) that *packs* the newer domains (IME, ViewCapture, WindowManager, input events) as sub-fields, demuxed in `ParseWinscopeExtensionsData`. So adding a domain didn't require a new top-level packet field each time.
+- **One module.** All of these are parsed by a single `WinscopeModule` (`winscope_module.cc`), which registers for the top-level fields (93, 94, 96, 97, 104, 105) and a `WinscopeExtensions` field (112) that *packs* the newer domains (IME, ViewCapture, WindowManager, input events) as **numbered sub-fields** — the "extensions §N" in the table above — demuxed in `ParseWinscopeExtensionsData`. So adding a domain didn't require a new top-level packet field each time.
 - **Same pattern as SF layers.** Each domain's *snapshot* table has the same `ts` / `arg_set_id` / `base64_proto_id` triple you learned in Chapter 5 — a timestamp, the flattened proto as args, and the interned raw bytes — so everything you know about reading the SF layers tables transfers directly. (The one exception is **ProtoLog**, whose `__intrinsic_protolog` is a per-*message* table with typed columns `ts, level, tag, message, stacktrace, location` instead of the args/base64 pair — it's log lines, not proto snapshots.)
 
 ### Why "ViewCapture" matters for the SF plugin's limitations
@@ -118,11 +118,11 @@ include(s.protolog_table().IterateRows());                           // ProtoLog
 ```
 and `GetBoundsMutationCount` enumerates the same nine (the parity the comment requires, Chapter 5.6). So the fix isn't "make the SF layers viewer open" — it's "**make any winscope-only trace open**." Capture only WindowManager, or only ProtoLog, and the timeline now has valid bounds.
 
-(Honest caveat: there isn't a dedicated input-event snapshot table in this set, so a trace containing *only* `android_input_event` and nothing else might still have empty bounds — an edge worth checking if input-only traces matter. And, as of writing, this importer-plugin layout + the fix live in upstream Perfetto, not yet in AOSP's vendored `external/perfetto`.)
+(Caveat: there isn't a dedicated input-event snapshot table in this set, so a trace containing *only* `android_input_event` and nothing else might still have empty bounds — check that case if input-only traces matter to you. And, as of writing, this importer-plugin layout plus the fix live in upstream Perfetto, not yet in AOSP's vendored `external/perfetto`.)
 
 ---
 
-## 10.4 The takeaway
+## 10.4 Summary
 
 - **Transactions** are the input deltas; **layers** are the materialized result; `MODE_GENERATED` can rebuild the latter from the former.
 - The SF layers viewer is one member of a family — WM, IME, ViewCapture, ProtoLog, Shell Transitions — all parsed by **one** trace_processor importer, all with the same `ts`/`arg_set_id`/`base64_proto_id` table shape.

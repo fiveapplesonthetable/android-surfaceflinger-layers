@@ -28,10 +28,10 @@ This is the crux: **neither is derivable from the other inside the trace.** The 
 
 The video feature can't ask the display hardware for "the final pixels" cheaply on every device. Instead it reuses the compositor: per **physical** display, it creates an **auto-mirror `VirtualDisplay`** whose output Surface *is a `MediaCodec` encoder's input surface*:
 
-- `VirtualDisplay` created with `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR` + `setDisplayIdToMirror(displayId)`;
+- `VirtualDisplay` created with `VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR` (the OS keeps it showing the source display's content, no manual layer copying — Chapter 3.5) + `setDisplayIdToMirror(displayId)`;
 - its output Surface comes from `MediaCodec.createInputSurface()`.
 
-So SurfaceFlinger composites the mirrored screen straight into a hardware video encoder — no CPU readback. Because it's a *mirror*, it emits frames **only when the screen changes** (idle screen → no frames). Each session emits one `codec_config` packet (SPS/PPS) then one `video_frame` packet per change, carrying one Annex-B access unit; the bytes are exposed to the UI as a **zero-copy** BLOB. (Defaults: H.264, scale 0.25 — hence the small previews — key frame every ~2 s.)
+So SurfaceFlinger composites the mirrored screen straight into a hardware video encoder — no CPU readback. Because it's a *mirror*, it emits frames **only when the screen changes** (idle screen → no frames). Each session emits its bytes as two packet kinds. First, one `codec_config` packet carrying the H.264 **parameter sets** (SPS/PPS — the small once-up-front headers a decoder needs: resolution, profile, frame structure). Then one `video_frame` packet per on-screen change, each carrying a single **access unit** (one coded picture's worth of H.264, in *Annex-B* framing — start-code-delimited so the decoder can find picture boundaries). Both are handed to the UI as a **zero-copy** BLOB. (Defaults: H.264, scale 0.25 — each axis quarter-size, hence the small previews — key frame every ~2 s.)
 
 Critically, the video session **skips virtual displays as capture targets** — it only ever *uses* a virtual display as its own private encoder sink, and keys its frames by the **mirrored physical `display_id`** (e.g. display 0), not the virtual display's id.
 
@@ -39,7 +39,7 @@ Critically, the video session **skips virtual displays as capture targets** — 
 
 ## 6.3 The overlap, stated precisely
 
-Here's the subtle bit, and the one that explains the plugin's "(virtual)" displays.
+This is the part that explains the plugin's "(virtual)" displays.
 
 When the video feature is recording, it **manufactures a virtual display** (the encoder sink) inside SurfaceFlinger. That virtual display is a real SF display: it has its own **layer stack** and (via auto-mirror) a **mirror layer** (Chapter 3.5).
 
@@ -62,7 +62,7 @@ You can reproduce the exact same thing without the video feature at all: run `ad
 Two different questions, two different mechanisms:
 
 - **"Which display does this layer belong to?"** is a structural lookup: a layer's `group_id` (= its `layer_stack`) equals the display's `group_id`. Pure geometry/structure, served by the layers tables. This is what the plugin's display selector does — it re-scopes the Surface view to one display's composition (Chapter 7).
-- **"What did display N actually look like at time T?"** is `__intrinsic_video_frames WHERE display_id = N` → fetch the AU bytes → WebCodecs-decode → canvas. Served by the video tables.
+- **"What did display N actually look like at time T?"** is `__intrinsic_video_frames WHERE display_id = N` → fetch the access-unit bytes → decode them in the browser via **WebCodecs** (the web API for hardware video decode) → draw to a canvas. Served by the video tables.
 
 They don't "overlap" because they're orthogonal granularities. The layers source has N per-layer rectangles per snapshot and *no* picture; the video source has *one* encoded picture per change and *no* per-layer breakdown (compositing already flattened it). The plugin in this book is the **structure** viewer; its video sibling is the **pixels** viewer. Run both data sources and you can put them side by side on the same timeline — structure and pixels of the same frame.
 

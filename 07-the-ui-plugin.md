@@ -6,16 +6,32 @@ Code is at `ui/src/plugins/com.android.SurfaceFlinger/`. The plugin is ~1,400 li
 
 ---
 
-## 7.0 The Perfetto UI, from zero
+## 7.0 What you need before the code: Mithril and the plugin API
 
-Four things you need to know before reading the code:
+Everything below rests on two things: the Mithril UI framework and the Perfetto plugin API. Here's the minimum to read the code; the [glossary](glossary.md) defines every API name and widget this chapter mentions in passing.
 
-- **Mithril** is the UI framework. A component is an object with a `view()` that returns a virtual-DOM tree built with `m('tag.class', attrs, children)`. Mithril re-runs `view()` and diffs the result against the DOM after any event handler or after an explicit `m.redraw()`. There's no separate state store — components read live data and re-render.
-- **A plugin** is a class implementing `PerfettoPlugin` with a `static readonly id`, an optional `static readonly description`, and an `onTraceLoad(ctx: Trace)` called once per trace. `ctx` (a `Trace`) is the handle to everything: `ctx.engine` (run SQL), `ctx.pages` (register full-screen pages), `ctx.sidebar`, `ctx.tracks`, `ctx.defaultWorkspace`, `ctx.selection`, `ctx.navigate`. A plugin only runs if it's listed in `default_plugins.ts` (else its enable flag defaults off and `onTraceLoad` never fires).
-- **A track** is a horizontal lane on the timeline. `SliceTrack.create({...})` makes one from a SQL `dataset` (a query yielding `id, ts, dur, name, depth`). Tracks are grouped under `TrackNode`s in the workspace.
-- **A `DataGrid`** is Perfetto's table widget: you give it a `schema`, `columns`, and a `DataSource` (here `InMemoryDataSource(rows)`), and it renders a sortable/filterable grid. A column can have a `cellRenderer` returning arbitrary `m()` content.
+**Mithril in six lines.** A component is an object with a `view()`. `view()` returns a tree of *vnodes* built by `m()`:
 
-The plugin uses only native Perfetto widgets — `Section`, `Tree`/`TreeNode`, `Chip`, `DataGrid`, `Checkbox`, `Select`, `TextInput`, `Button`, `Timestamp` — so it looks and behaves like the rest of Perfetto, including light/dark theming.
+```ts
+m('div.bar',                  // tag + CSS class — like writing <div class="bar">
+  {onclick: () => doThing()}, // attrs: DOM attributes + event handlers
+  ['hello', m('span', x)]);   // children: strings or more vnodes
+```
+
+There is no state store and no `setState`. Mithril re-runs `view()` and diffs the result against the real DOM after every event handler, and after an explicit `m.redraw()` (which is how *async* results — a finished SQL query — get on screen). So the rule of thumb when reading this plugin is: **the view is a pure function of the session object; anything async ends in `m.redraw()`.** Lifecycle hooks `oncreate`/`onupdate` run when a vnode's real DOM element (`v.dom`) is first attached and on each later redraw — §7.3 uses them to drive the `<canvas>`.
+
+**The plugin API surface.** A plugin is a class implementing `PerfettoPlugin`; Perfetto calls its `onTraceLoad(ctx)` once per trace, and only if the plugin is listed in `default_plugins.ts`. The `ctx` argument (a `Trace`) is the entire API, and this plugin touches four corners of it:
+
+| `ctx.` | what it does | used in |
+| --- | --- | --- |
+| `engine` | run SQL against the trace (async, WASM round-trip) | §7.1 |
+| `pages` / `sidebar` | register the full-screen page + its menu item | §7.7 |
+| `tracks` / `defaultWorkspace` | register timeline tracks, place them in lanes | §7.7 |
+| `selection` / `navigate` | drive the app — select a slice, change route | §7.9 |
+
+Two API objects do the heavy lifting in the body of the plugin. A **track** is one horizontal timeline lane: `SliceTrack.create(...)` builds one from a SQL query yielding `id, ts, dur, name, depth`, and tracks nest under `TrackNode`s. A **`DataGrid`** is Perfetto's sortable/filterable table — you hand it a schema, columns, and a `DataSource` of rows, and a column's `cellRenderer` can return any `m()` content. Both reappear with real code below.
+
+The plugin uses only native Perfetto widgets — `Section`, `Tree`/`TreeNode`, `Chip`, `DataGrid`, `Checkbox`, `Select`, `TextInput`, `Button`, `Timestamp` — so it inherits the app's look and light/dark theming for free.
 
 ---
 
@@ -65,7 +81,7 @@ export function sqlInt(value: string): string {
 
 ## 7.2 `surfaceflinger_session.ts` — shared state, owned by the plugin
 
-One `SurfaceFlingerSession` is created per trace and shared by **both** surfaces — the full-screen page and the timeline track's details panel. It holds the selected display, the snapshot list, the current index, the loaded layers (and lookup maps), the selected layer + its args, the diff state, and the per-layer hide/pin sets. The plugin owning this single object is what makes the two surfaces stay in sync.
+One `SurfaceFlingerSession` is created per trace and shared by **both** surfaces — the full-screen page and the timeline track's details panel. Because both surfaces read and write *one* object (selected display, snapshot list + index, loaded layers and lookup maps, selected layer + its args, diff state, hide/pin sets), they can't drift out of sync. The full field list is in the [deep-dive](ui-deep-dive.md).
 
 ### The view options (shared)
 
@@ -218,7 +234,13 @@ A tiny module exporting `renderSurfaceControls(o: SfViewOptions)` (the shading `
 
 ## 7.5 `surfaceflinger_curated.ts` — the "curated properties"
 
-This derives Winscope's human-readable property summary for the selected layer from the flattened proto args: grouped sections — **Visibility** (visible? invisible-due-to reasons, occluded-by / partially-occluded-by / covered-by layer refs, flags), **Geometry** (Z, layer stack, Z-relative-to, bounds, screen bounds, crop, destination frame, transform, requested transform), **Buffer**, **Color & effects** (color, requested color, corner radii, corner-radius crop, shadow/background-blur with `px` units), **Input** (focusable, touchable region, input transform, input config, crop layer, replace-touch-with-crop). Helpers format rects as `(l, t) – (r, b)`, colors as `r:… g:… b:… α:…`, corner radii as `(tl, tr, bl, br)` (with a scalar fallback), and resolve layer-id references to `name (#id)` so the UI can make them clickable.
+This derives Winscope's human-readable property summary for the selected layer from the flattened proto args, grouped into sections in a fixed order:
+
+- **Visibility** — visible?, invisible-due-to reasons, occluded-by / partially-occluded-by / covered-by layer refs, flags.
+- **Geometry** — Z, layer stack, Z-relative-to, bounds, screen bounds, crop, destination frame, transform, requested transform.
+- **Buffer**, **Color & effects** (color, requested color, corner radii, requested corner radii, corner-radius crop, shadow radius, background blur — the last two in `px`), and **Input** (focusable, touchable region, input transform, input config, crop layer, replace-touch-with-crop).
+
+Helpers format rects as `(l, t) – (r, b)`, colors as `r:… g:… b:… α:…`, and corner radii as `(tl, tr, bl, br)` (with a scalar fallback); layer-id references resolve to `name (#id)` so the UI can make them clickable.
 
 ---
 
@@ -320,7 +342,7 @@ WHERE id IN (SELECT snapshot_id FROM __intrinsic_surfaceflinger_display WHERE di
 colorizer: (row) => materialColorScheme(row.name),
 ```
 
-`SfSnapshotPanel` is the `TrackEventDetailsPanel` shown when you click a slice. Its `load()` syncs the shared session to *this* display + the nearest snapshot, then captures (for stability) the display name, snapshot index/total, layer counts, top layers, and the display-scoped layers for the preview. `render()` is a `GridLayout`: a left "Snapshot" section (Snapshot `N / total`, Timestamp, Layers, Visible, Top layers — the index and timestamp **consistent with the page bar**) and a right "Layout" section with the inline rects preview (no controls — it respects the page's options to stay uncluttered) plus an "Open in SurfaceFlinger viewer" button. Clicking a rect/label in the preview selects the layer, same as the page.
+`SfSnapshotPanel` is the `TrackEventDetailsPanel` shown when you click a slice. Its `load()` syncs the shared session to *this* display + the nearest snapshot, then captures (for stability) the display name, snapshot index/total, layer counts, top layers, and the display-scoped layers for the preview. `render()` lays out a `GridLayout` of two sections. The left "Snapshot" section shows Snapshot `N / total`, Timestamp, Layers, Visible, and Top layers — its index and timestamp matching the page bar, so the two surfaces never disagree about which frame you're on. The right "Layout" section holds the inline rects preview plus an "Open in SurfaceFlinger viewer" button. The preview ships no controls of its own: it reuses the page's view options, which keeps the panel uncluttered and the two previews identical. Clicking a rect or label in it selects that layer, same as the page.
 
 ---
 
@@ -346,6 +368,6 @@ Every color is a Perfetto theme variable (`--pf-color-*`), so light/dark mode "j
 - **Track → page:** click a snapshot slice → `SfSnapshotPanel.load()` syncs the session to that display+snapshot → "Open in SurfaceFlinger viewer" opens the page already on that frame.
 - **Page → track:** "Timeline" button → `selectTrackEvent` selects the same snapshot slice on that display's track and scrolls to it.
 
-Because both read one shared session and show the snapshot index + timestamp identically, moving between the compact timeline peek and the deep full-screen page is seamless.
+Because both read one shared session and show the same snapshot index + timestamp, you move between the compact timeline panel and the full-screen page without losing which frame you're on.
 
 [« Chapter 6](06-two-views-layers-vs-video.md)  ·  [Chapter 8 — Reviewer's guide »](08-reviewers-guide.md)

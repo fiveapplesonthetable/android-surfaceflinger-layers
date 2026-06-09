@@ -8,7 +8,7 @@ AOSP `android16-qpr2-release`; paths under `frameworks/native/services/surfacefl
 
 ## 3.1 Two representations of a "layer" (read this first)
 
-Modern SurfaceFlinger has been split, and the code looks contradictory until you know this:
+Modern SurfaceFlinger has been split in two, and the code looks contradictory until you know why. The old `Layer` was one god-object: it held the tree, the geometry, the z-order resolution, *and* each layer's buffer pipeline — so every transaction touched a tangle of shared mutable state. The FrontEnd rewrite pulled the *data model* (tree, state, per-frame snapshot) out into its own immutable-snapshot pipeline, leaving `Layer` to own only the buffer plumbing. So:
 
 1. **The legacy `Layer` object** (`Layer.h`/`Layer.cpp`) is now *slim*. It owns the per-layer **buffer pipeline** (acquire fences, release callbacks, frame timeline, buffer latching) and a `State mDrawingState`. It no longer owns the tree, z-order, or geometry resolution.
 2. **The "FrontEnd"** (`FrontEnd/`) owns the data model this chapter is about. Its readme states the design:
@@ -41,7 +41,7 @@ It is a **graph**, not a strict tree, because a node can be reached via multiple
     Detached_Mirror,  // mirrored, ignoring the source's local transform
 ```
 
-Crucially, the requested state holds **ids, not pointers**, so layer handles don't get their lifetime extended:
+The requested state holds **ids, not pointers**, so layer handles don't get their lifetime extended:
 
 ```cpp
 // FrontEnd/RequestedLayerState.h:127
@@ -167,7 +167,7 @@ The key design point — **mirroring clones no layers**:
 
 Because one node has multiple parents, it is reached by multiple **traversal paths**, and **each path produces its own snapshot** — that's how the same content appears on both the phone screen and the recording, possibly with different geometry. A `Detached_Mirror` snapshot even ignores the source's local transform (`LayerSnapshotBuilder.cpp:608`), and layers flagged `eLayerSkipScreenshot` are dropped from mirrored hierarchies (`LayerSnapshotBuilder.cpp:810`) — which is why secure/DRM content vanishes from screenshots and recordings.
 
-> **Why this matters to the plugin.** When you record with the video data source (or just run `screenrecord`), SurfaceFlinger creates that virtual display, and if you're *also* tracing layers, it shows up in `__intrinsic_surfaceflinger_display` with `is_virtual=1` and a mirror layer in its layer stack. The plugin therefore lists it as a (virtual)-tagged display you can select. That single mirror layer is often invisible (a `(Mirror)` of an input consumer), which is why selecting that display can show "No visible layers — N hidden" (Chapter 7, Chapter 8). Chapter 6 dissects this overlap.
+> **Why this matters to the plugin.** When you record with the video data source (or just run `screenrecord`), SurfaceFlinger creates that virtual display, and if you're *also* tracing layers, it shows up in `__intrinsic_surfaceflinger_display` with `is_virtual=1` and a mirror layer in its layer stack. The plugin therefore lists it as a (virtual)-tagged display you can select. That single mirror layer is often invisible (it mirrors a layer that exists only to receive touch input, with nothing to draw), which is why selecting that display can show "No visible layers — N hidden" (Chapter 7, Chapter 8). Chapter 6 dissects this overlap.
 
 ---
 
@@ -192,7 +192,7 @@ and the translation `(tx, ty)` is the layer's `(x, y)`. Together they map a laye
 |  0     0    1  |   | 1 |
 ```
 
-(SurfaceFlinger's naming is its own, not the textbook one: `dsdx`/`dsdy` are the two terms that produce the **x** output, `dtdx`/`dtdy` the two that produce the **y** output. The exact pairing — `dsdx`,`dtdx` on the x row; `dtdy`,`dsdy` on the y row — is what the code computes: `Transform::transform()` in `libs/ui/Transform.cpp` returns `r[0] = dsdx·x + dtdx·y + tx`, `r[1] = dtdy·x + dsdy·y + ty`. The plugin's `apply()` (Chapter 7.3) and trace_processor's `TransformMatrix` use this identical form, so it's the same equation from the device all the way to the rects view.)
+(SF's names aren't the textbook ones, so don't read them by analogy. The **x** output is `dsdx·x + dtdx·y + tx`; the **y** output is `dtdy·x + dsdy·y + ty` — that, exactly, is what `Transform::transform()` in `libs/ui/Transform.cpp` computes. The plugin's `apply()` (Chapter 7.3) and trace_processor's `TransformMatrix` use the same form, so it's one equation from device to rects view.)
 
 The world transform is the parent's transform composed with the local one:
 ```cpp

@@ -38,8 +38,8 @@ message LayersSnapshotProto {
 - **`elapsed_realtime_nanos`** — set from `time.ns()` (`SurfaceFlinger.cpp:9352`); this becomes the snapshot's `ts`.
 - **`where`** — "Currently either `visibleRegionsDirty` or `bufferLatched`" (`:55`). It records *which commit phase* produced the snapshot.
 - **`layers`** — a `LayersProto`, which is just `repeated LayerProto layers = 1` — a **flat** list; the tree is rebuilt from `id`/`parent`/`children`.
-- **`excludes_composition_state`** — true when composition state (visible region, HWC type) was *not* captured (i.e. `TRACE_FLAG_COMPOSITION` was off). It's written as the negation of the flag (`SurfaceFlinger.cpp:9355`).
-- **`displays`** — repeated `DisplayProto` (§4.4).
+- **`excludes_composition_state`** — `true` exactly when the `TRACE_FLAG_COMPOSITION` flag was off, so composition state (visible region, HWC type) was *not* captured (`SurfaceFlinger.cpp:9355`).
+- **`displays`** — repeated `DisplayProto` (§4.3).
 - **`vsync_id`** — used to de-dup generated snapshots.
 
 The legacy on-disk file wraps these in a `LayersTraceFileProto { fixed64 magic_number = 1; repeated entry = 2; ... }` with a `.LYRTRACE` magic; but **through Perfetto each snapshot is a `TracePacket` field instead** (§4.6), so the file wrapper doesn't appear in Perfetto traces.
@@ -54,8 +54,8 @@ This is the big one (`surfaceflinger_layers.proto:116`). Grouped by what the plu
 - `id = 1` unique id; `name = 2` (e.g. `"StatusBar#75"`; SF appends `"(Mirror)"` for clones, `LayerProtoHelper.cpp:468`); `type = 5`; `parent = 25` (`-1` if none); `children = 3`; `relatives = 4`; `z_order_relative_of = 26`; `is_relative_of = 51`; `original_id = 58`.
 
 **Geometry & placement**
-- `layer_stack = 9` (uint32 — *this is the display grouping*); `z = 10`; `position = 11` / `requested_position = 12` (`PositionProto {x,y}` — the translation, since `TransformProto` omits it, see §4.5); `size = 13`; `crop = 14`; `bounds = 45`, `screen_bounds = 46`, `source_bounds = 44` (`FloatRectProto`); `destination_frame = 57`.
-- `transform = 23`, `requested_transform = 24`, `buffer_transform = 39`, `effective_transform = 43` — all `TransformProto` (§4.5).
+- `layer_stack = 9` (uint32 — *this is the display grouping*); `z = 10`; `position = 11` / `requested_position = 12` (`PositionProto {x,y}` — the translation, since `TransformProto` omits it, see §4.4); `size = 13`; `crop = 14`; `bounds = 45`, `screen_bounds = 46`, `source_bounds = 44` (`FloatRectProto`); `destination_frame = 57`.
+- `transform = 23`, `requested_transform = 24`, `buffer_transform = 39`, `effective_transform = 43` — all `TransformProto` (§4.4).
 - `corner_radius = 41` (`[deprecated]` — the live one is the per-corner `corner_radii = 61`, a `CornerRadiiProto {tl,tr,bl,br}`), `corner_radius_crop = 48`, `shadow_radius = 49`, `background_blur_radius = 52`.
 
 **Appearance & composition**

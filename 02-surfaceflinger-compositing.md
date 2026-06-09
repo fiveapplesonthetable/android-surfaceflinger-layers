@@ -15,7 +15,9 @@ The front end decides *what* the screen should look like; CE decides *how* to pr
 
 ## 2.1 The loop: vsync → commit → composite
 
-SurfaceFlinger runs a single main thread on a `Looper`. It does not busy-loop; the `Scheduler` wakes it once per vsync. When it wakes it runs exactly two steps, in order: **`commit()`** then (if needed) **`composite()`**. The contract is the `ICompositor` interface:
+The screen refreshes on a fixed heartbeat (vsync). Every beat, SF has to answer two very different questions: *did anything change?* and, only if so, *what pixels go out?* Bundling those into one step would mean doing layout-and-decision work even for a frame identical to the last. So SF splits the beat in two: a cheap **commit** that resolves state and reports whether a redraw is needed, and an expensive **composite** that runs only when it is.
+
+SurfaceFlinger runs a single main thread on a `Looper` (Android's per-thread event loop — it blocks until the next message, here a vsync, is posted, then runs it). It does not busy-loop; the `Scheduler` wakes it once per vsync. When it wakes it runs exactly two steps, in order: **`commit()`** then (if needed) **`composite()`**. The contract is the `ICompositor` interface:
 
 ```cpp
 // Scheduler/include/scheduler/interface/ICompositor.h:37
@@ -130,6 +132,8 @@ void CompositionEngine::present(CompositionRefreshArgs& args) {
 }
 ```
 
+(`preComposition`/`postComposition` are the per-frame bookends — they fire the frame-timeline callbacks and gather present/release fences across all outputs; the interesting per-display work is in between.)
+
 `Output::present` (`Output.cpp:474`) is the per-display sequence; the three steps that matter are:
 
 - `prepareFrame()` — **choose** HWC vs client per layer (validate with HWC),
@@ -145,7 +149,7 @@ This is the most important idea in compositing. For each layer, each frame, SF c
 - **HWC / DEVICE composition** — the display hardware's compositor places the buffer directly as an **overlay**. Cheap, low-power, but the hardware has a limited number of overlay planes and capabilities (scaling, rotation, blending, color transforms it can't all do).
 - **Client / GPU composition** — SF uses **RenderEngine** to draw the layer into a single shared "client target" framebuffer. Flexible (the GPU can do anything), but costs GPU time and power.
 
-The hardware gets the final say. The dance is **propose → validate → fall back**:
+The hardware gets the final say, in three steps — **propose → validate → fall back**:
 
 1. SF proposes that layers be DEVICE-composited and writes their state to HWC2 layers.
 2. SF calls **validateDisplay**; HWC returns **getChangedCompositionTypes** — the layers it *demands* be done as CLIENT instead (because it ran out of planes or can't handle that layer).
@@ -165,6 +169,8 @@ The validate/getChanges sequence:
 ```
 
 There's an optimization — if no layer already needs the GPU, SF may **skip validate** and present in one call (the "fast path", `HWComposer.cpp:560`). The moment any layer requires client composition, validate is mandatory.
+
+The trade-off baked in here: `validateDisplay` is a synchronous round-trip into the display HAL, so SF pays it to *discover* HWC's limits rather than modelling them itself. That keeps SF honest across wildly different display hardware (it never has to know each panel's plane count or format support up front), at the price of a HAL call on every frame that touches the GPU — which is exactly why the fast path that skips it when nothing needs client composition is worth having.
 
 Applying the result marks the demanded layers CLIENT and records what kind of composition the frame uses:
 
@@ -248,7 +254,7 @@ Rect OutputLayer::calculateOutputDisplayFrame() const {
 }
 ```
 
-The transforms compose in a specific order (the source comment is gold):
+The transforms compose in a specific order, spelled out in the source comment:
 
 ```cpp
 // CompositionEngine/src/OutputLayer.cpp:251

@@ -25,6 +25,8 @@ The rest of this chapter is those two pillars in detail.
 
 ## 1.2 Producer and consumer: the two ends of a BufferQueue
 
+Pillar one said the producer and consumer live in different processes and hand a buffer back and forth. That raises the obvious question: where does the shared state live? Someone has to track which buffers exist, who holds each one, and which are queued — and both ends have to agree on it without a round-trip per access. The answer is a single object, owned once, that both ends reach through Binder.
+
 The core object is `BufferQueueCore`. It holds all the shared state. It is wrapped by two "faces":
 
 - the **producer** face, `BufferQueueProducer`, implementing the Binder interface `IGraphicBufferProducer` (often abbreviated **IGBP**),
@@ -58,11 +60,11 @@ class Surface : public ANativeObjectBase<ANativeWindow, Surface, RefBase>
     sp<IGraphicBufferProducer> mGraphicBufferProducer;   // :546 — the producer it wraps
 ```
 
-So: **"Surface" (the producer) = an `ANativeWindow` backed by an `IGraphicBufferProducer`.** Keep this distinct from a SurfaceFlinger **Layer** (the consumer-side object, Chapter 3). The naming collision is one of Android graphics' cruelest beginner traps.
+So: **"Surface" (the producer) = an `ANativeWindow` backed by an `IGraphicBufferProducer`.** Keep this distinct from a SurfaceFlinger **Layer** (the consumer-side object, Chapter 3). The two names are easy to confuse, and confusing them will mislead you for the rest of the stack.
 
 ### The slot array — why buffers aren't copied or re-sent
 
-The clever part: the actual pixel buffers are **not** sent over Binder every frame, and never copied. Instead both ends keep a **slot table** — up to 64 entries — and per frame they exchange only a small integer (the slot index) plus a fence. A `GraphicBuffer` is transferred over Binder exactly once, the first time a slot is filled (`requestBuffer`). The header says it outright:
+The actual pixel buffers are **not** sent over Binder every frame, and never copied. Instead both ends keep a **slot table** — up to 64 entries — and per frame they exchange only a small integer (the slot index) plus a fence. A `GraphicBuffer` is transferred over Binder exactly once, the first time a slot is filled (`requestBuffer`). The header says it outright:
 
 ```cpp
 // libs/gui/include/gui/IGraphicBufferProducer.h:111
@@ -77,6 +79,8 @@ The slot count ceiling:
 // libs/ui/include/ui/BufferQueueDefs.h:25
 static constexpr int NUM_BUFFER_SLOTS = 64;
 ```
+
+The cost of this scheme is that the two mirrors must never disagree: if the consumer reallocates a `GraphicBuffer` under a slot, the producer's cached pointer for that slot is stale until the next `requestBuffer` re-syncs it. Most of the slot-state bookkeeping you'll read in this file exists to keep those two tables honest, and the 64-slot ceiling is the price of mirroring by fixed-size table rather than by message.
 
 The core owns the canonical slot table, a FIFO of queued buffers, and free-sets:
 ```cpp
@@ -136,7 +140,7 @@ Here is the full cycle. Notice that pixels move by *reference* (a slot index) an
 // libs/gui/BufferQueueProducer.cpp:449 (method), :577 (the transition)
 mSlots[found].mBufferState.dequeue();   // FREE -> DEQUEUED
 ```
-If the slot has no buffer, or the requested size/format changed, the producer allocates a fresh `GraphicBuffer` for it (`:609`). Crucially, `dequeueBuffer` hands back the slot's **release fence** (`:631`):
+If the slot has no buffer, or the requested size/format changed, the producer allocates a fresh `GraphicBuffer` for it (`:609`). Note that `dequeueBuffer` hands back the slot's **release fence** (`:631`):
 ```cpp
     *outFence = mSlots[found].mFence;   // the RELEASE fence from the previous consumer
     mSlots[found].mFence = Fence::NO_FENCE;
@@ -181,9 +185,9 @@ That `notifyBufferReleased()` is what unblocks a producer that ran out of buffer
 
 ---
 
-## 1.4 Double vs triple buffering — finally, precisely
+## 1.4 Double vs triple buffering — derived, not decreed
 
-Now the headline concept, which most explanations get vague about. In this codebase **the buffer count is not a hard-coded "2" or "3."** It is *derived* from three knobs.
+In this codebase **the buffer count is not a hard-coded "2" or "3."** It is *derived* from three knobs.
 
 ### The three knobs
 
@@ -208,7 +212,7 @@ int BufferQueueCore::getMaxBufferCountLocked() const {
 Read it off directly:
 
 - **Defaults, blocking mode:** `1 (acquired) + 1 (dequeued) + 0 = 2` → **double buffering.** The producer holds one to draw into; the consumer holds one to show. They swap.
-- **Async / non-blocking dequeue:** `1 + 1 + 1 = 3` → **triple buffering.** The extra `+1` is the whole point of triple buffering.
+- **Async / non-blocking dequeue:** `1 + 1 + 1 = 3` → **triple buffering.** That extra `+1` is the spare buffer that defines triple buffering.
 - **High refresh / deep pipeline** (consumer allowed 2): `2 + 1 + 1 = 4`.
 
 ### Why the "+1" — the non-blocking guarantee
@@ -271,7 +275,7 @@ int SurfaceFlinger::calculateMaxAcquiredBufferCount(Fps refreshRate,
 
 ### vsync
 
-The display refreshes at fixed instants — vsync. SurfaceFlinger does not poll; it is woken once per vsync by the scheduler (the HAL vsync entry is `SurfaceFlinger.cpp:2452`, `onComposerHalVsync`). Apps schedule their drawing one vsync ahead of the present they're targeting via **Choreographer** (`libs/gui/Choreographer.cpp`), which is fed by a `DisplayEventReceiver`/`DisplayEventDispatcher`. The full SF wake→commit→composite loop is Chapter 2; here we care about one step of it: **latching**.
+Recall the two unsolved timing problems from §1.1: swap a buffer mid-scanout and you tear; poll the display and you waste a core busy-waiting. Both are solved by pinning every swap to the one clock the display already obeys — its refresh boundary, the **vsync**. The display refreshes at fixed instants; SurfaceFlinger does not poll, it is woken once per vsync by the scheduler (the HAL vsync entry is `SurfaceFlinger.cpp:2452`, `onComposerHalVsync`). Apps don't see vsync directly either; they register a frame callback with **Choreographer** (`libs/gui/Choreographer.cpp`) — the per-app object that receives the vsync tick and runs your frame work one vsync ahead of the present you're targeting — itself fed by a `DisplayEventReceiver`/`DisplayEventDispatcher`. The full SF wake→commit→composite loop is Chapter 2; here we care about one step of it: **latching**.
 
 ### vsync offsets and the pipeline (why a frame takes ~3 refreshes)
 
@@ -346,7 +350,7 @@ So a frame reaches the screen in two hops:
 1. **per queued frame:** app `queueBuffer` → BBQ `onFrameAvailable` → `acquireBuffer` → `setBuffer` transaction (in the app process).
 2. **per vsync:** SF applies the transaction in **commit**, latches the buffer (gated on the acquire fence), composites in **composite**, presents; then returns a **release fence** through the transaction-completed callback, which BBQ uses to `releaseBuffer` back into the BufferQueue, freeing the producer's slot.
 
-This is why Chapter 2 talks about "transactions carrying buffers" — that's BBQ at work. It does not change anything in this chapter conceptually: it's still producer→BufferQueue→consumer, fences and all; the consumer just happens to be a per-window object that forwards via transactions.
+This is why Chapter 2 talks about "transactions carrying buffers" — that's BBQ at work. It does not change anything in this chapter conceptually: it's still producer→BufferQueue→consumer, fences and all; the consumer just happens to be a per-window object that forwards via transactions. The trade BLAST makes: pushing the consumer into the app process removes a SurfaceFlinger-side BufferQueue per window and lets each window be driven by the same transaction mechanism as every other window property — at the cost of one transaction applied per buffer, and the acquire happening on the app's side rather than SF's.
 
 ---
 
