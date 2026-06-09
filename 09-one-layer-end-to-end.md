@@ -29,7 +29,7 @@ On the next vsync, SF's **commit** phase applies that transaction and **latches*
 | `layer_stack` | **0** | belongs to display group 0 = CrosvmDisplay (Ch. 3.4) |
 | `z` | 0 | its order among siblings (Ch. 3.3) |
 | `bounds` | (0, 0) – (720, 48) | a full-width, 48-px-tall strip at the top (Ch. 3.6) |
-| transform | identity (`dsdx=1, dtdy=1, tx=ty=0`) | no scale/rotate/translate — it sits exactly at its bounds (Ch. 4.4) |
+| transform | identity (`dsdx=1, dsdy=1, tx=ty=0`) | no scale/rotate/translate — it sits exactly at its bounds (Ch. 4.4) |
 | `color` | r=0, g=0, b=0, **a=1.0** | opaque black background (Ch. 3.6) |
 | `is_opaque` | 0 | not flagged opaque (it has translucent icons over the black) |
 | `dataspace` | `BT709 sRGB Full range` | the color space (Ch. 3.6) |
@@ -39,7 +39,7 @@ On the next vsync, SF's **commit** phase applies that transaction and **latches*
 | `is_hidden_by_policy` | 0 | not hidden |
 | `flags` | 8448 | SF layer flags bitfield |
 
-Read that `hwc_composition_type = DEVICE` line in light of Chapter 2.5: SurfaceFlinger *proposed* the status bar as a DEVICE layer, HWC *validated* and accepted it (it's a simple, axis-aligned, top-of-screen rectangle — ideal for an overlay plane), so it costs **zero GPU time** to composite. A layer with a non-90° rotation, a shadow, or a colorspace HWC couldn't handle would instead show `HWC_TYPE_CLIENT` here. This single field is the entire "is this layer cheap to composite?" answer, and it's exactly what the plugin's **HWC** chip surfaces.
+Read that `hwc_composition_type = DEVICE` line in light of Chapter 2.5: SurfaceFlinger *proposed* the status bar as a DEVICE layer, HWC *validated* and accepted it (it's a simple, axis-aligned, top-of-screen rectangle — ideal for an overlay plane), so it costs **zero GPU time** to composite. A layer with a non-90° rotation, a shadow, or a colorspace HWC couldn't handle would instead show `HWC_TYPE_CLIENT` here. This one field answers "is this layer cheap to composite?", and it's exactly what the plugin's **HWC** chip surfaces.
 
 The status bar is composited onto CrosvmDisplay because their layer stacks match (both `group_id = 0`, Chapter 3.4).
 

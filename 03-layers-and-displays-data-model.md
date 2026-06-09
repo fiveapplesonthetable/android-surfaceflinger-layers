@@ -6,7 +6,7 @@ AOSP `android16-qpr2-release`; paths under `frameworks/native/services/surfacefl
 
 ---
 
-## 3.1 Two representations of a "layer" (read this first)
+## 3.1 Two representations of a "layer"
 
 Modern SurfaceFlinger has been split in two, and the code looks contradictory until you know why. The old `Layer` was one god-object: it held the tree, the geometry, the z-order resolution, *and* each layer's buffer pipeline — so every transaction touched a tangle of shared mutable state. The FrontEnd rewrite pulled the *data model* (tree, state, per-frame snapshot) out into its own immutable-snapshot pipeline, leaving `Layer` to own only the buffer plumbing. So:
 
@@ -122,7 +122,7 @@ A **layer stack** is the integer that binds layers to a display:
 
 A `DisplayDevice` carries its own layer stack (`DisplayDevice.h:132`) and applies it as a `LayerFilter` onto its composition output (`DisplayDevice.cpp:208`). A layer is composited on a display **iff their layer stacks match** (the `LayerFilter::includes` test, Chapter 2.7).
 
-> **This is the single most important fact for the plugin's multi-display behavior.** In the trace, a layer's rect carries a `group_id` = its layer stack, and a display's rect carries a `group_id` = its layer stack. Matching a layer to "its display" is a `group_id == group_id` lookup. The plugin uses exactly this to scope the Surface view to the selected display (Chapter 7).
+> **This `group_id` match is what the plugin's multi-display behavior is built on.** In the trace, a layer's rect carries a `group_id` = its layer stack, and a display's rect carries a `group_id` = its layer stack. Matching a layer to "its display" is a `group_id == group_id` lookup. The plugin uses exactly this to scope the Surface view to the selected display (Chapter 7).
 
 Physical vs virtual is decided by whether the display has physical panel info:
 
@@ -165,7 +165,7 @@ The key design point — **mirroring clones no layers**:
 
 > "Mirrored layers are represented by the same node in the graph with multiple parents. This allows us to implement mirroring without cloning Layers and maintaining complex hierarchies." — `FrontEnd/readme.md:114`
 
-Because one node has multiple parents, it is reached by multiple **traversal paths**, and **each path produces its own snapshot** — that's how the same content appears on both the phone screen and the recording, possibly with different geometry. A `Detached_Mirror` snapshot even ignores the source's local transform (`LayerSnapshotBuilder.cpp:608`), and layers flagged `eLayerSkipScreenshot` are dropped from mirrored hierarchies (`LayerSnapshotBuilder.cpp:810`) — which is why secure/DRM content vanishes from screenshots and recordings.
+Because one node has multiple parents, it is reached by multiple **traversal paths**, and **each path produces its own snapshot** — that's how the same content appears on both the phone screen and the recording, possibly with different geometry. A `Detached_Mirror` snapshot even ignores the source's local transform (`LayerSnapshotBuilder.cpp:608`). Layers flagged `eLayerSkipScreenshot` are dropped from mirrored hierarchies (`LayerSnapshotBuilder.cpp:810`) — that's why secure/DRM content vanishes from screenshots and recordings.
 
 > **Why this matters to the plugin.** When you record with the video data source (or just run `screenrecord`), SurfaceFlinger creates that virtual display, and if you're *also* tracing layers, it shows up in `__intrinsic_surfaceflinger_display` with `is_virtual=1` and a mirror layer in its layer stack. The plugin therefore lists it as a (virtual)-tagged display you can select. That single mirror layer is often invisible (it mirrors a layer that exists only to receive touch input, with nothing to draw), which is why selecting that display can show "No visible layers — N hidden" (Chapter 7, Chapter 8). Chapter 6 dissects this overlap.
 
@@ -192,7 +192,7 @@ and the translation `(tx, ty)` is the layer's `(x, y)`. Together they map a laye
 |  0     0    1  |   | 1 |
 ```
 
-(SF's names aren't the textbook ones, so don't read them by analogy. The **x** output is `dsdx·x + dtdx·y + tx`; the **y** output is `dtdy·x + dsdy·y + ty` — that, exactly, is what `Transform::transform()` in `libs/ui/Transform.cpp` computes. The plugin's `apply()` (Chapter 7.3) and trace_processor's `TransformMatrix` use the same form, so it's one equation from device to rects view.)
+(SF's names aren't the textbook ones, so don't read them by analogy. The **x** output is `dsdx·x + dtdx·y + tx`; the **y** output is `dtdy·x + dsdy·y + ty` — that is what `Transform::transform()` in `libs/ui/Transform.cpp` computes, and what the plugin's `apply()` (Chapter 7.3) reproduces, so a layer lands in the rects view exactly where SF put it on screen.)
 
 The world transform is the parent's transform composed with the local one:
 ```cpp

@@ -48,7 +48,7 @@ The legacy on-disk file wraps these in a `LayersTraceFileProto { fixed64 magic_n
 
 ## 4.2 One layer: `LayerProto`
 
-This is the big one (`surfaceflinger_layers.proto:116`). Grouped by what the plugin uses:
+This is the big one (`surfaceflinger_layers.proto:151`, `message LayerProto`). Grouped by what the plugin uses:
 
 **Identity & tree**
 - `id = 1` unique id; `name = 2` (e.g. `"StatusBar#75"`; SF appends `"(Mirror)"` for clones, `LayerProtoHelper.cpp:468`); `type = 5`; `parent = 25` (`-1` if none); `children = 3`; `relatives = 4`; `z_order_relative_of = 26`; `is_relative_of = 51`; `original_id = 58`.

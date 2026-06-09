@@ -144,7 +144,7 @@ void CompositionEngine::present(CompositionRefreshArgs& args) {
 
 ## 2.5 The central decision: HWC overlays vs GPU (client) composition
 
-This is the most important idea in compositing. For each layer, each frame, SF can composite it one of two ways:
+For each layer, each frame, SF can composite it one of two ways:
 
 - **HWC / DEVICE composition** — the display hardware's compositor places the buffer directly as an **overlay**. Cheap, low-power, but the hardware has a limited number of overlay planes and capabilities (scaling, rotation, blending, color transforms it can't all do).
 - **Client / GPU composition** — SF uses **RenderEngine** to draw the layer into a single shared "client target" framebuffer. Flexible (the GPU can do anything), but costs GPU time and power.
@@ -170,7 +170,7 @@ The validate/getChanges sequence:
 
 There's an optimization — if no layer already needs the GPU, SF may **skip validate** and present in one call (the "fast path", `HWComposer.cpp:560`). The moment any layer requires client composition, validate is mandatory.
 
-The trade-off baked in here: `validateDisplay` is a synchronous round-trip into the display HAL, so SF pays it to *discover* HWC's limits rather than modelling them itself. That keeps SF honest across wildly different display hardware (it never has to know each panel's plane count or format support up front), at the price of a HAL call on every frame that touches the GPU — which is exactly why the fast path that skips it when nothing needs client composition is worth having.
+The trade-off: `validateDisplay` is a synchronous round-trip into the display HAL, so SF discovers HWC's limits at runtime instead of modelling each panel's plane count and format support itself — at the cost of one HAL call per frame that touches the GPU. That cost is why the fast path skips validate when nothing needs client composition.
 
 Applying the result marks the demanded layers CLIENT and records what kind of composition the frame uses:
 
@@ -321,7 +321,7 @@ vsync ─► Scheduler::onFrameSignal
                                         present (to the panel) ─► present fence
 ```
 
-## 2.8 The whole frame, in one breath
+## 2.8 The whole frame, end to end
 
 1. vsync → `Scheduler::onFrameSignal`.
 2. **commit:** flush transactions → apply to the layer tree → latch each layer's buffer (acquire-fence gated) → rebuild the layer **snapshot** → return `mustComposite`.

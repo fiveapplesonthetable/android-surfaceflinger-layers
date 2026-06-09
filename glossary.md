@@ -30,6 +30,8 @@ Every recurring term, one place. Chapter references point to where it's explaine
 
 **buffer state** — a slot's state: FREE → DEQUEUED → QUEUED → ACQUIRED → FREE. (Ch. 1.2)
 
+**capture mode (MODE_ACTIVE / MODE_GENERATED / MODE_DUMP)** — how the layers data source decides *when* to snapshot. `MODE_ACTIVE` snapshots on every layer-state change (the book's simple capture); `MODE_GENERATED` replays SF's transaction ring buffer to reconstruct snapshots after the fact (bugreports); `MODE_DUMP` takes a single snapshot at stop. (Ch. 4.5)
+
 **cellRenderer** — a per-column DataGrid hook returning arbitrary Mithril content for a cell (used for header rows and clickable layer references). (Ch. 7.0, 7.6)
 
 **client composition** — see *GPU composition*.
@@ -80,7 +82,7 @@ Every recurring term, one place. Chapter references point to where it's explaine
 
 **GPU / client composition** — compositing a layer by drawing it into a shared framebuffer with RenderEngine (the GPU). Flexible but costs GPU time. (Ch. 2.5)
 
-**gralloc** — the graphics-memory allocator HAL; allocates `GraphicBuffer`s usable by the GPU, display, and camera at once. (Ch. 1.2)
+**gralloc** — the graphics-memory allocator HAL; allocates `GraphicBuffer`s usable by the GPU, display, and camera at once. (See *buffer / GraphicBuffer*, Ch. 1.2)
 
 **group_id** — in trace_processor, a rect's layer stack — the per-display grouping. Layer↔display matching is `group_id == group_id`. (Ch. 5.2)
 
@@ -144,7 +146,7 @@ Every recurring term, one place. Chapter references point to where it's explaine
 
 **scan-out** — the display hardware reading a finished buffer pixel-by-pixel and driving it onto the panel. (Ch. 1.1)
 
-**SCHED_DEADLINE** — a Linux real-time scheduling policy ("run this much work by this time") that SF / RenderEngine threads can use to reliably hit vsync deadlines; covered by Balsini's LWN article. (Ch. 11.9)
+**SCHED_DEADLINE** — a Linux real-time scheduling policy ("run this much work by this time") that SF / RenderEngine threads can use to reliably hit vsync deadlines; covered by Balsini's LWN article. (Ch. 1.5)
 
 **sched_switch** — the kernel ftrace event emitted on every CPU context switch (old task → new task); the basis for Perfetto's per-thread scheduling tracks. (Ch. 11.9)
 
@@ -169,6 +171,8 @@ Every recurring term, one place. Chapter references point to where it's explaine
 **trace_bounds** — the (start_ts, end_ts) the UI uses for the timeline window; computed by trace_processor by asking each importer for its extent. The fix makes the winscope importer report the snapshot tables' extent. (Ch. 5.6)
 
 **trace_processor** — Perfetto's C++/WASM library that loads a trace and exposes SQL; the winscope importer turns layer snapshots into tables. (Ch. 5)
+
+**trace flags (TRACE_FLAG_COMPOSITION / INPUT / VIRTUAL_DISPLAYS / …)** — per-capture bits selecting what each snapshot carries: `COMPOSITION` adds the visible region + `hwc_composition_type` (the GPU/HWC chips); `INPUT` adds `input_window_info` (the Input section + Spy chip); `VIRTUAL_DISPLAYS` includes virtual-display layers. (Ch. 4.5)
 
 **TracePacket** — one record in a Perfetto trace; a layers snapshot is a `TracePacket` with field 93 set to a `LayersSnapshotProto`. (Ch. 4.6)
 

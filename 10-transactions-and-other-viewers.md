@@ -77,7 +77,7 @@ __intrinsic_surfaceflinger_transaction_flag # decoded `what` bits: flags_id, fla
 
 ## 10.2 The other Winscope domains (one importer, many viewers)
 
-Winscope isn't only SurfaceFlinger. The same trace_processor module parses six domains; here's each, with its data source, its `TracePacket` route, and its table(s). They're listed so you understand the shape the SF viewer fits into — and what future plugins could light up (the tables already exist).
+Winscope isn't only SurfaceFlinger. The same trace_processor module parses seven domains; here's each, with its data source, its `TracePacket` route, and its table(s). They're listed so you understand the shape the SF viewer fits into — and what future plugins could light up (the tables already exist).
 
 | Domain | Data source | Packet route | Captures | Tables |
 |---|---|---|---|---|

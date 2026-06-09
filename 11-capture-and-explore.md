@@ -1,6 +1,6 @@
 # Chapter 11 — Capture it yourself
 
-*Prerequisite: Chapter 7 (what the panes are). This is the hands-on chapter: capture a layers trace, open it, and tour every feature with real screenshots from the plugin. If you've read this far, this is where it becomes muscle memory.*
+*Prerequisite: Chapter 7 (what the panes are). This is the hands-on chapter: capture a layers trace, open it, and tour every feature with real screenshots from the plugin. If you've read this far, this is where you put it to work.*
 
 ---
 
@@ -92,7 +92,7 @@ If your trace has more than one display (e.g. you ran `screenrecord`), the selec
 
 ![Multi-display: the ScreenRecorder (virtual) display selected](images/multi-display.png)
 
-This is the honest representation from Chapter 6: the recorder is a real SF display you can inspect, not hidden.
+The recorder is a real SF display you can inspect, not hidden (Chapter 6).
 
 ---
 
@@ -113,7 +113,7 @@ Because both surfaces read one shared session and show the snapshot index + time
 
 ---
 
-## 11.9 The payoff: correlate a jank with composition
+## 11.9 Correlate a jank with composition
 
 This is the reason the layer structure belongs *inside* Perfetto rather than in a separate tool. Capture layers **alongside** the frame timeline and scheduling, and you can go from "the screen stuttered" to "this specific layer fell back to GPU and blew the budget" on one timeline.
 

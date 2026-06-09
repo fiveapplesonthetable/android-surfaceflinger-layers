@@ -122,14 +122,13 @@ Here is the full cycle. Notice that pixels move by *reference* (a slot index) an
 
 ```
             dequeueBuffer          queueBuffer            acquireBuffer
-   ┌──► FREE ───────────► DEQUEUED ───────────► QUEUED ───────────────► ACQUIRED ──┐
-   │   (BufferQueue       (producer/app          (in the FIFO,           (consumer/  │
-   │    owns it)           draws into it)         + acquire fence)        SF reads)   │
-   │                                                  │                               │
-   │                                          async mode: newest                      │
-   │                                          frame overwrites the                    │
-   │                                          old queued one (drop)         releaseBuffer
-   └──────────────────────────────────────────────────────────────────────  ◄───────┘
+   ┌──► FREE ───────────► DEQUEUED ───────────► QUEUED ───────────────► ACQUIRED ─────┐
+   │   (BufferQueue       (producer/app         (in the FIFO,          (consumer/     │
+   │    owns it)          draws into it)        + acquire fence)        SF reads)     │
+   │                                                                                  │
+   │                          async mode: newest frame overwrites                     │
+   │                          the old queued one (drop)                releaseBuffer  │
+   └────────────────────────────────────────────────────────────────────  ◄───────────┘
         notifyBufferReleased() wakes a producer blocked in dequeueBuffer    (+ release fence)
 ```
 
@@ -237,7 +236,7 @@ This number is reported to the app (via `NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS`) 
   ```
 - **Triple buffering (3):** the producer almost never blocks (there's always a spare), smoothing throughput and hiding occasional long frames — at the cost of **one extra frame of latency** (a frame may sit finished-but-unshown for a refresh).
 
-AOSP even ships a design note on the failure mode, which is a perfect teaching example:
+AOSP ships a design note on this failure mode:
 
 > "Buffer stuffing happens on the client side when SurfaceFlinger misses a frame, but the client continues producing buffers at the same rate. ... SurfaceFlinger cannot yet release the buffer for the frame that it missed and the client has one less buffer to render into. The client may then run out of buffers ... increasing the chances of janking."
 > — `libs/gui/BufferStuffing.md`
@@ -277,7 +276,7 @@ int SurfaceFlinger::calculateMaxAcquiredBufferCount(Fps refreshRate,
 
 Recall the two unsolved timing problems from §1.1: swap a buffer mid-scanout and you tear; poll the display and you waste a core busy-waiting. Both are solved by pinning every swap to the one clock the display already obeys — its refresh boundary, the **vsync**. The display refreshes at fixed instants; SurfaceFlinger does not poll, it is woken once per vsync by the scheduler (the HAL vsync entry is `SurfaceFlinger.cpp:2452`, `onComposerHalVsync`). Apps don't see vsync directly either; they register a frame callback with **Choreographer** (`libs/gui/Choreographer.cpp`) — the per-app object that receives the vsync tick and runs your frame work one vsync ahead of the present you're targeting — itself fed by a `DisplayEventReceiver`/`DisplayEventDispatcher`. The full SF wake→commit→composite loop is Chapter 2; here we care about one step of it: **latching**.
 
-### vsync offsets and the pipeline (why a frame takes ~3 refreshes)
+### vsync offsets and the pipeline (why a frame lands ~2 refreshes later)
 
 There isn't *one* vsync signal handed to everyone at the same instant. The scheduler (historically `DispSync`) broadcasts vsync to the **app** and to the **SurfaceFlinger main thread** at *different, deliberately staggered offsets* — call them **VSYNC-app** and **VSYNC-sf**. The app gets its tick first and has (ideally) a full refresh period to render; SurfaceFlinger's tick is delayed so that by the time SF wakes, the app's frame is finished and waiting. That stagger is what lets the two run back-to-back instead of fighting for the same slice of time.
 
@@ -290,7 +289,7 @@ The payoff is a **pipeline**. Think of three stages — the app renders frame N,
  Display (scan-out)  │       │       │   N   │  N+1  │   ← shows one frame behind SF
 ```
 
-So a frame the app starts at T is on screen at roughly T+2 — **a few refreshes of latency** — but a *new* finished frame appears every refresh (smooth throughput). This is the same latency-vs-smoothness trade as triple buffering (§1.4), now at the scheduling level: the extra buffers exist precisely to keep this pipeline full. If any stage overruns its period, a frame is **skipped** — that's jank, and it's why "did a stage miss its vsync deadline?" is *the* question in frame-timing analysis (Chapter 11.9 shows how to answer it from a trace). For the full scheduling story — `DispSync`, the offsets, and the kernel-scheduling work behind them — Alessio Balsini's [*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/) (LWN, 2020) is the canonical read; this book is, in part, the structural companion that makes that article easy to follow.
+So a frame the app starts at T is on screen at roughly T+2 — **about two refreshes of latency, for a three-stage pipeline** — but a *new* finished frame appears every refresh (smooth throughput). This is the same latency-vs-smoothness trade as triple buffering (§1.4), now at the scheduling level: the extra buffers exist to keep this pipeline full. If any stage overruns its period, a frame is **skipped** — that's jank, and it's why "did a stage miss its vsync deadline?" is the question in frame-timing analysis (Chapter 11.9 shows how to answer it from a trace). For the full scheduling story — `DispSync`, the offsets, and the kernel-scheduling work behind them — see Alessio Balsini's [*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/) (LWN, 2020).
 
 ### Latching = choosing which queued buffer to show this frame
 
@@ -312,7 +311,7 @@ bool Layer::latchBufferImpl(bool& recomputeVisibleRegions, nsecs_t latchTime,
 
 The BufferQueue itself also does vsync-aware timing inside `acquireBuffer`: given the expected present time it will **drop** queued frames that are already overdue (so a newer due frame shows) and **defer** a frame whose target present time is still in the future (returning `PRESENT_LATER`) — `BufferQueueConsumer.cpp:149` and `:214`.
 
-### The three fences (the heart of asynchrony)
+### The three fences
 
 | Fence | Direction | Means |
 |---|---|---|

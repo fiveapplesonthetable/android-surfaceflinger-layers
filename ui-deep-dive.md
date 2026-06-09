@@ -17,7 +17,7 @@ index.ts ─ registers the page (surfaceflinger_page) + per-display tracks (surf
    data: surfaceflinger_data.ts (SQL), route: surfaceflinger_route.ts, styles: surfaceflinger.scss
 ```
 
-Eleven files. The plugin depends only on Perfetto's own modules — `public/*` (plugin/trace/track APIs), `widgets/*` (Section, Tree, Chip, DataGrid, Checkbox, Select, TextInput, Button), `components/*` (the DataGrid, `tracks/slice_track`, `colorizer`, `widgets/timestamp`), `trace_processor/*` (`engine`, `query_result`, `dataset`), and `base/*` (`assert`, `time`) — and `mithril`. No third-party graphics/UI libraries (the 3D rects are hand-rolled 2D canvas).
+Eleven files. The plugin depends only on Perfetto's own modules — `public/*` (plugin/trace/track APIs), `widgets/*` (Section, Tree, Chip, Checkbox, Select, TextInput, Button, DetailsShell, GridLayout, Intent), `components/*` (the DataGrid, `tracks/slice_track`, `colorizer`, `widgets/timestamp`), `trace_processor/*` (`engine`, `query_result`, `dataset`), and `base/*` (`assert`, `time`) — and `mithril`. No third-party graphics/UI libraries (the 3D rects are hand-rolled 2D canvas).
 
 ---
 
@@ -211,7 +211,7 @@ Translate to canvas coords; first test `labelHit` bands (a click in the gutter s
 ---
 
 ## 4. `surfaceflinger_controls.ts`
-`renderSurfaceControls(o)` returns the `.pf-sf-toolbar` with: a shading `Select` (gradient/opacity/wireframe, **first**), an "Only visible" `Checkbox`, and "Spacing"/"Rotation" range inputs (each maps 0–100 ↔ 0–1 on `o.explode`/`o.rotation`). `rectsOptionsFrom(o)` maps `{rectsOnlyVisible, explode, rotation, shading}` → the rects view's `SfRectsOptions`. Both the page and (the preview's options) come through here, so there's one source of truth.
+`renderSurfaceControls(o)` returns the `.pf-sf-toolbar` with: a shading `Select` (gradient/opacity/wireframe, **first**), an "Only visible" `Checkbox`, and "Spacing"/"Rotation" range inputs (each maps 0–100 ↔ 0–1 on `o.explode`/`o.rotation`). `rectsOptionsFrom(o)` maps `{rectsOnlyVisible, explode, rotation, shading}` → the rects view's `SfRectsOptions`. Both the page and the timeline preview build their rects options through here, so there's one source of truth.
 
 ---
 
@@ -241,7 +241,7 @@ Translate to canvas coords; first test `labelHit` bands (a click in the gutter s
 ---
 
 ## 8. `surfaceflinger_page.ts`
-`SurfaceFlingerPage.view` — early-out empty state if no displays; else the `.pf-sf-bar` toolbar (display `Select` with "(virtual)" tags; the **Timeline** jump `Button` → `navigate('#!/viewer')` + `selectTrackEvent('/surfaceflinger_track/'+displayId, snapshotId, {scrollToSelection:true})`; first/prev/next/last `Button`s; the scrub `input[type=range]`; the `N / total` position handling `snapshots.length===0`; the `Timestamp`) over `.pf-sf-main` which is the `SfViewer` or the "No snapshots for this display." empty state.
+`SurfaceFlingerPage.view` — early-out empty state if no displays; else the `.pf-sf-bar` toolbar (display `Select` with "(virtual)" tags; the **Timeline** jump `Button` → `navigate('#!/viewer')` + `selectTrackEvent('/surfaceflinger_track/'+displayId, snapshotId, {scrollToSelection:true})`; first/prev `Button`s, the scrub `input[type=range]`, next/last `Button`s; the `N / total` position handling `snapshots.length===0`; the `Timestamp`) over `.pf-sf-main` which is the `SfViewer` or the "No snapshots for this display." empty state.
 
 ---
 

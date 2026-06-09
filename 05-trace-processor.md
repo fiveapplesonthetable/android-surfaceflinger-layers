@@ -1,6 +1,6 @@
 # Chapter 5 — From proto bytes to SQL tables
 
-*Prerequisite: [Chapter 4](04-the-layers-trace.md). The trace is now a stream of `TracePacket`s, each carrying one `LayersSnapshotProto`. This chapter is how Perfetto's **trace_processor** flattens that nested proto into flat SQL rows the UI queries — the tables, the importer pipeline, rect/visibility computation, the two dedup tricks, and the one-commit **trace-bounds fix** that makes a layers-only trace open at all.*
+*Prerequisite: [Chapter 4](04-the-layers-trace.md). The trace is now a stream of `TracePacket`s, each carrying one `LayersSnapshotProto`. This chapter is how Perfetto's **trace_processor** flattens that nested proto into flat SQL rows the UI queries — the tables, the importer pipeline, rect/visibility computation, the two dedup tables, and the one-commit **trace-bounds fix** that makes a layers-only trace open at all.*
 
 Paths under `/mnt/agent/tmp/perfetto-vf` (branch `dev/zezeozue/winscope`).
 
@@ -10,11 +10,11 @@ Paths under `/mnt/agent/tmp/perfetto-vf` (branch `dev/zezeozue/winscope`).
 
 trace_processor is a C++ library that loads a trace and exposes SQL. It's also compiled to **WASM** (WebAssembly), so the exact same code runs inside the browser — that's how the Perfetto web UI queries a trace locally with no server, and why every query from the UI is an async round-trip (Chapter 7). For SurfaceFlinger layers there are three pieces:
 
-1. **Intrinsic tables** — declared in `src/trace_processor/tables/winscope_tables.py`, from which C++ table classes (`tables::SurfaceFlingerLayerTable`, …) and SQL names (`__intrinsic_surfaceflinger_layer`, …) are generated.
+1. **Intrinsic tables** — "intrinsic" = built into trace_processor's C++ (hence the `__intrinsic_` SQL prefix), as opposed to a SQL view defined on top. They're declared in `src/trace_processor/tables/winscope_tables.py`, from which C++ table classes (`tables::SurfaceFlingerLayerTable`, …) and SQL names (`__intrinsic_surfaceflinger_layer`, …) are generated.
 2. **The importer** — `src/trace_processor/plugins/winscope_importer/`, a proto-importer module that decodes each packet and inserts rows.
 3. **The trace-bounds contribution** — the importer reports its own time extent so a pure-layers trace isn't treated as empty (the fix).
 
-Two cross-cutting tricks you'll see on every row:
+Two cross-cutting columns you'll see on every row:
 
 - **`base64_proto_id`** — the raw proto bytes of a snapshot/layer, base64-encoded and **interned** into trace_processor's global **string pool**. *Interning* means storing each distinct value once in a shared table and handing back a small integer id; equal values get the same id, so identical blobs share one id. The UI fetches the original proto by this id. (It's a string-pool id, not a foreign key.) Because identical protos collapse to one id, **comparing two layers' `base64_proto_id` is an exact "did anything change?" test** — the plugin uses this for its diff (Chapter 7).
 - **`arg_set_id`** — the whole proto is *also* flattened field-by-field into the generic `args` table. `arg_set_id` groups all args of one row, so the UI can show every proto field as key/value without a column per field.
@@ -28,16 +28,20 @@ From `src/trace_processor/tables/winscope_tables.py`. The SurfaceFlinger viewer 
 ```
 LayersSnapshotProto (one TracePacket, field 93)
  ├─ snapshot ──► __intrinsic_surfaceflinger_layers_snapshot {ts, base64_proto_id, arg_set_id}
- ├─ DisplayProto[] ─► __intrinsic_surfaceflinger_display {snapshot_id, is_virtual, display_id,
- │                         trace_rect_id ─┐
- └─ LayerProto[]  ─► __intrinsic_surfaceflinger_layer {snapshot_id, layer_id, layer_name,
-                          is_visible, hwc_composition_type, z_order_relative_of,
-                          base64_proto_id, arg_set_id, layer_rect_id ─┐
-                                                                      ▼  (both rect_ids point here)
-                          __intrinsic_winscope_trace_rect {group_id (= layer_stack), depth,
-                              is_visible, opacity,
-                              rect_id ─────► __intrinsic_winscope_rect {x, y, w, h}        (deduped)
-                              transform_id ► __intrinsic_winscope_transform {dsdx..ty}}    (deduped)
+ │
+ ├─ DisplayProto[] ─► __intrinsic_surfaceflinger_display
+ │       {snapshot_id, is_virtual, display_id, trace_rect_id──┐
+ │                                                            │
+ └─ LayerProto[] ──► __intrinsic_surfaceflinger_layer         │
+         {snapshot_id, layer_id, layer_name, is_visible,      │
+          hwc_composition_type, z_order_relative_of,          │
+          base64_proto_id, arg_set_id, layer_rect_id──┐       │
+                                                      │       │
+                                                      ▼       ▼  a display rect and a layer rect are the same kind of rect
+          __intrinsic_winscope_trace_rect {group_id (= layer_stack), depth,
+              is_visible, opacity,
+              rect_id ─────► __intrinsic_winscope_rect {x, y, w, h}        (deduped)
+              transform_id ► __intrinsic_winscope_transform {dsdx..ty}}    (deduped)
 
       every proto field ─► args {arg_set_id, key, value}      raw bytes ─► string pool (base64_proto_id)
 ```

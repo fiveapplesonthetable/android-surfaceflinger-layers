@@ -1,8 +1,8 @@
 # Chapter 7 — The UI plugin, annotated
 
-*Prerequisite: [Chapter 5](05-trace-processor.md) (the tables) is essential; Chapters 1–3 give you the meaning of what's on screen. This chapter walks every file of `com.android.SurfaceFlinger`, teaching the Perfetto UI surface from zero as it goes.*
+*Prerequisite: [Chapter 5](05-trace-processor.md) (the tables) is essential; Chapters 1–3 give you the meaning of what's on screen. This chapter walks every file of `com.android.SurfaceFlinger`, teaching the Perfetto UI surface as it goes.*
 
-Code is at `ui/src/plugins/com.android.SurfaceFlinger/`. The plugin is ~1,400 lines across eleven files. We'll go in dependency order: framework background → wiring → data → session → the three panes → the timeline track → styles.
+Code is at `ui/src/plugins/com.android.SurfaceFlinger/`. The plugin is ~2,560 lines across eleven files. We'll go in dependency order: framework background → wiring → data → session → the three panes → the timeline track → styles.
 
 ---
 
@@ -29,7 +29,7 @@ There is no state store and no `setState`. Mithril re-runs `view()` and diffs th
 | `tracks` / `defaultWorkspace` | register timeline tracks, place them in lanes | §7.7 |
 | `selection` / `navigate` | drive the app — select a slice, change route | §7.9 |
 
-Two API objects do the heavy lifting in the body of the plugin. A **track** is one horizontal timeline lane: `SliceTrack.create(...)` builds one from a SQL query yielding `id, ts, dur, name, depth`, and tracks nest under `TrackNode`s. A **`DataGrid`** is Perfetto's sortable/filterable table — you hand it a schema, columns, and a `DataSource` of rows, and a column's `cellRenderer` can return any `m()` content. Both reappear with real code below.
+Two API objects appear throughout the body of the plugin. A **track** is one horizontal timeline lane: `SliceTrack.create(...)` builds one from a SQL query yielding `id, ts, dur, name, depth`, and tracks nest under `TrackNode`s. A **`DataGrid`** is Perfetto's sortable/filterable table — you hand it a schema, columns, and a `DataSource` of rows, and a column's `cellRenderer` can return any `m()` content. Both reappear with real code below.
 
 The plugin uses only native Perfetto widgets — `Section`, `Tree`/`TreeNode`, `Chip`, `DataGrid`, `Checkbox`, `Select`, `TextInput`, `Button`, `Timestamp` — so it inherits the app's look and light/dark theming for free.
 
@@ -57,10 +57,13 @@ Two deliberate choices here, both from the reviewer's notes (Chapter 8):
 - `display_id` is read as `LONG` and stored as a **string** (`it.id.toString()`) because a display id is an int64 that can exceed JavaScript's 2⁵³ safe integer.
 - `grp` is read as `NUM_NULL` and stored as `number | undefined` — *not* `IFNULL(...,0)`. A display with no trace rect gets `group: undefined`, so it is **not** aliased onto the real group 0. (Group 0 is a legitimate display; conflating "no group" with "group 0" would scope the surface wrong.)
 
-`querySnapshots(displayId)` returns the snapshots that include a display, in time order — and validates the interpolated id first:
+`querySnapshots(displayId)` returns the snapshots that include a display, in time order. The snapshot table has no display column, so it filters via a subquery on `__intrinsic_surfaceflinger_display`, validating the interpolated id first:
 
 ```ts
-WHERE display_id = ${sqlInt(displayId)}
+WHERE s.id IN (
+  SELECT snapshot_id FROM __intrinsic_surfaceflinger_display
+  WHERE display_id = ${sqlInt(displayId)}
+)
 ```
 ```ts
 // displayId is an int64 rendered as a base-10 string; validate before splicing
@@ -113,7 +116,7 @@ This is the direct expression of Chapter 3.4: the **Surface** is scoped to the s
 
 ### Async loading with two independent tokens (the race fix)
 
-This is the most safety-critical code in the plugin. Loading is async (every `queryLayers`/`queryArgs` is a round-trip to the WASM engine), and the user can scrub or change displays faster than queries resolve. Two **monotonic tokens** discard superseded work:
+This is the trickiest code in the plugin. Loading is async (every `queryLayers`/`queryArgs` is a round-trip to the WASM engine), and the user can scrub or change displays faster than queries resolve. Two **monotonic tokens** discard superseded work:
 
 ```ts
 private loadToken = 0;   // guards a display/snapshot/layer load
@@ -150,7 +153,7 @@ private async loadIndex(i: number, token: number): Promise<void> {
 
 ## 7.3 `surfaceflinger_rects.ts` — the Surface view (the 3D rects)
 
-This is the signature view: a rotatable, stacked 3D rendering of the layer rectangles, drawn with a **pure 2D canvas** (no WebGL/Three.js, so it renders in headless CI where the standalone Winscope's WebGL view is blank).
+This is the Surface view: a rotatable, stacked 3D rendering of the layer rectangles, drawn with a **pure 2D canvas** (no WebGL/Three.js, so it renders in headless CI where the standalone Winscope's WebGL view is blank).
 
 ### The projection, drawn
 
@@ -197,7 +200,7 @@ function readColors(el: HTMLElement): RectColors {
 ```
 This is what makes the canvas follow light/dark mode along with the rest of the DOM. The three shading modes: **gradient** (solid fill darkened by depth, like Winscope), **opacity** (the layer's own alpha), **wireframe** (borders only).
 
-### Leader-line labels (no occlusion — the part that took care)
+### Leader-line labels (no occlusion)
 
 Naïvely labelling each rect at its corner produces an unreadable pile when many full-screen layers share a corner. Instead labels live in a **right-hand gutter**, each in its own vertical slot, connected to its rect by a thin leader line + anchor dot — exactly the technique SurfaceFlinger's mapper3d uses. The placement is de-conflicted so labels never overlap and never clip the canvas bottom:
 ```ts
@@ -214,7 +217,7 @@ The canvas records each drawn quad's screen polygon in `hit`; `onClick` does a p
 
 The canvas DOM and 2D context use the codebase's assertion helpers (`assertIsInstance(v.dom, HTMLCanvasElement)`, `assertExists(canvas.getContext('2d'))`) rather than casts — matching the VideoFrames plugin's conventions.
 
-### Empty state, made actionable
+### Empty state
 
 If nothing draws, the message distinguishes "truly empty" from "everything is hidden by the only-visible filter" — the latter is what a `(virtual)` encoder display shows, since its only layer is an invisible mirror (Chapter 6.3):
 ```ts
@@ -284,9 +287,9 @@ With diff on, the proto grid gains a **Previous** column showing the prior snaps
 
 ---
 
-## 7.6b `surfaceflinger_route.ts` — the one constant
+## 7.6b `surfaceflinger_route.ts` — the route constant
 
-The eleventh file is a one-liner, but it earns a mention because two surfaces must agree on it: it exports the page's route string.
+The eleventh file is a one-liner, but two surfaces must agree on it: it exports the page's route string.
 
 ```ts
 export const SURFACEFLINGER_ROUTE = '/surfaceflinger';
@@ -359,7 +362,7 @@ It handles the empty cases: no displays at all ("record with the android.surface
 
 ## 7.10 `surfaceflinger.scss` — theming
 
-Every color is a Perfetto theme variable (`--pf-color-*`), so light/dark mode "just works" without per-mode code — the only reason it wouldn't is hardcoded colors, which there are none of (the canvas reads the same vars via JS, §7.3). The panes are flex with `overflow: auto` and `min-width: max-content` on the tree, so long names / deep trees / wide values scroll instead of clipping. The diff tints and selection use `color-mix(in srgb, var(--pf-color-...) X%, transparent)` so they adapt to the theme.
+Every color is a Perfetto theme variable (`--pf-color-*`), so light/dark mode follows the app with no per-mode code — there are no hardcoded colors, and the canvas reads the same vars via JS (§7.3). The panes are flex with `overflow: auto` and `min-width: max-content` on the tree, so long names / deep trees / wide values scroll instead of clipping. The diff tints and selection use `color-mix(in srgb, var(--pf-color-...) X%, transparent)` so they adapt to the theme.
 
 ---
 

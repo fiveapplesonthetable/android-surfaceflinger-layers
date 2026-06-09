@@ -1,6 +1,6 @@
 # Chapter 8 — Reviewer's guide
 
-*Prerequisite: [Chapter 7](07-the-ui-plugin.md). This chapter is for someone reviewing or modifying the change: the invariants that must hold, the concurrency hazards and how they're handled, the design decisions worth knowing, the honest limitations, and a probe list.*
+*Prerequisite: [Chapter 7](07-the-ui-plugin.md). This chapter is for someone reviewing or modifying the change: the invariants that must hold, the concurrency hazards and how they're handled, the design decisions a reviewer will question, the limitations, and a probe list.*
 
 ---
 

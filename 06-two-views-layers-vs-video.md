@@ -33,7 +33,7 @@ The video feature can't ask the display hardware for "the final pixels" cheaply 
 
 So SurfaceFlinger composites the mirrored screen straight into a hardware video encoder — no CPU readback. Because it's a *mirror*, it emits frames **only when the screen changes** (idle screen → no frames). Each session emits its bytes as two packet kinds. First, one `codec_config` packet carrying the H.264 **parameter sets** (SPS/PPS — the small once-up-front headers a decoder needs: resolution, profile, frame structure). Then one `video_frame` packet per on-screen change, each carrying a single **access unit** (one coded picture's worth of H.264, in *Annex-B* framing — start-code-delimited so the decoder can find picture boundaries). Both are handed to the UI as a **zero-copy** BLOB. (Defaults: H.264, scale 0.25 — each axis quarter-size, hence the small previews — key frame every ~2 s.)
 
-Critically, the video session **skips virtual displays as capture targets** — it only ever *uses* a virtual display as its own private encoder sink, and keys its frames by the **mirrored physical `display_id`** (e.g. display 0), not the virtual display's id.
+Critically, the video session **skips virtual displays as capture targets** — it only ever *uses* a virtual display as its own private encoder sink, and keys its frames by the **source (mirrored) display**, e.g. the built-in display rather than the encoder's own virtual display.
 
 ---
 

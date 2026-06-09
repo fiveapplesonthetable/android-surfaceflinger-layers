@@ -9,7 +9,7 @@ It's long and deliberately from-scratch, covering two things:
 
 It is written for someone who knows **nothing** about Android graphics. By the end you should understand the system well enough to (a) reason about jank and composition at a professional level, and (b) read, modify, and review the plugin's code line by line.
 
-A concrete litmus test for "did this work": Alessio Balsini's classic LWN article **[*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/)** is dense if you're new to this — it assumes you already know what a Surface, a BufferQueue, SurfaceFlinger, vsync offsets, and the render pipeline are. **This book is the on-ramp that makes that article an easy read.** Chapters 1–2 build exactly the vocabulary and the pipeline model it relies on (Chapter 1.5 covers its VSYNC-app/VSYNC-sf offsets directly); afterwards, go read it — it should click.
+A concrete litmus test for "did this work": Alessio Balsini's classic LWN article **[*Scheduling for the Android display pipeline*](https://lwn.net/Articles/809545/)** is dense if you're new to this — it assumes you already know what a Surface, a BufferQueue, SurfaceFlinger, vsync offsets, and the render pipeline are. **This book is the on-ramp that makes that article an easy read.** Chapters 1–2 build exactly the vocabulary and the pipeline model it relies on (Chapter 1.5 covers its VSYNC-app/VSYNC-sf offsets directly); afterwards, go read it.
 
 It is the SurfaceFlinger sibling of [android-display-video-pipeline](https://github.com/fiveapplesonthetable/android-display-video-pipeline), which covered the *pixels* side (encoding the screen to video in a trace). This book covers the *structure* side (the layers), and [Chapter 6](06-two-views-layers-vs-video.md) explains exactly how the two relate.
 
@@ -17,7 +17,7 @@ It is the SurfaceFlinger sibling of [android-display-video-pipeline](https://git
 
 ## How to read this
 
-Every claim about Android internals is backed by a citation into the **AOSP source** (`frameworks/native`, branch `android16-qpr2-release`), and every claim about the trace pipeline is backed by a citation into the **Perfetto source**. Citations look like `Layer.cpp:1475`. You do not need the source checked out to follow along — the relevant code is quoted inline — but the citations are there so you (or a reviewer) can verify nothing here is hand-waved.
+Every claim about Android internals is backed by a citation into the **AOSP source** (`frameworks/native`, branch `android16-qpr2-release`), and every claim about the trace pipeline is backed by a citation into the **Perfetto source**. Citations look like `Layer.cpp:1475`. You do not need the source checked out to follow along — the relevant code is quoted inline — but the citations are there so you (or a reviewer) can verify every claim against the source.
 
 > A note on line numbers: citations are against the trees at the time of writing. SurfaceFlinger and Perfetto move fast, so a given line may have drifted by a few lines by the time you read this — the quoted symbol/function is the reliable anchor; search for it if a number is slightly off.
 
@@ -53,9 +53,9 @@ A modern phone screen is a lie told 60–120 times a second. There is no single 
 
 So the screen you see is the *output* of compositing. It throws away the structure: once layers are flattened into pixels you can no longer ask "which surface is that? how big is it? is it occluded? what's behind it?".
 
-**The layers trace preserves that structure.** SurfaceFlinger can serialize a *snapshot* of its entire layer tree — every layer's bounds, transform, z-order, crop, color, buffer, input region, visibility, and which display it's on — once per frame, into a Perfetto trace. The `com.android.SurfaceFlinger` plugin reads those snapshots back and lets you fly through them.
+**The layers trace preserves that structure.** SurfaceFlinger can serialize a *snapshot* of its entire layer tree — every layer's bounds, transform, z-order, crop, color, buffer, input region, visibility, and which display it's on — once per frame, into a Perfetto trace. The `com.android.SurfaceFlinger` plugin reads those snapshots back and lets you step through them frame by frame.
 
-This is, historically, what the standalone **Winscope** tool did. The plugin brings that capability *inside* Perfetto, so the layer structure sits on the same timeline as scheduling, CPU frequency, GPU work, frame timelines, and jank — and so you can answer "the app janked at T; what was SurfaceFlinger compositing at T, and why did that layer fall back to GPU?" in one tool. (That cross-timeline workflow is demonstrated step by step in [Chapter 11.9](11-capture-and-explore.md). The original Winscope tool's capabilities and the honest remaining gaps are catalogued in [Chapter 8](08-reviewers-guide.md), the reviewer's guide.)
+This is, historically, what the standalone **Winscope** tool did. The plugin brings that capability *inside* Perfetto, so the layer structure sits on the same timeline as scheduling, CPU frequency, GPU work, frame timelines, and jank — and so you can answer "the app janked at T; what was SurfaceFlinger compositing at T, and why did that layer fall back to GPU?" in one tool. (That cross-timeline workflow is demonstrated step by step in [Chapter 11.9](11-capture-and-explore.md). The original Winscope tool's capabilities and the remaining gaps are catalogued in [Chapter 8](08-reviewers-guide.md), the reviewer's guide.)
 
 ---
 
@@ -64,18 +64,18 @@ This is, historically, what the standalone **Winscope** tool did. The plugin bri
 Here is the entire journey of one piece of screen structure, from an app drawing a button to you clicking that button's layer in the Perfetto UI. Each step links to the chapter that explains it.
 
 ```
-   ┌─────────────────────────────────────────────────────────────────────┐
+   ┌──────────────────────────────────────────────────────────────────────┐
    │ ON DEVICE                                                            │
-   │                                                                     │
-   │  App process                          SurfaceFlinger process        │
-   │  ───────────                          ─────────────────────         │
+   │                                                                      │
+   │  App process                          SurfaceFlinger process         │
+   │  ───────────                          ─────────────────────          │
    │                                 ┌─────────────┐                      │
    │  draw into a Surface ◄─dequeue──│ BufferQueue │ (the consumer is     │
    │  (Canvas / GPU)                 │  + BLAST    │  BBQ, lives in       │
    │  ──queue buffer + fence────────►│  (BBQ)      │  the app process     │
    │                                 └──────┬──────┘            ── Ch.1   │
    │                                        │ setBuffer transaction       │
-   │  ──────────────────────────────────────┼──── process boundary ──────│
+   │  ──────────────────────────────────────┼──── process boundary ────── │
    │                                        ▼                             │
    │                                     ┌──────────────┐                 │
    │   each vsync:  commit ──► latch ──► │  Layer tree  │  ── Ch.2, Ch.3  │
@@ -85,33 +85,33 @@ Here is the entire journey of one piece of screen structure, from an app drawing
    │                                            ▼                         │
    │                              ┌──────────────────────────┐            │
    │                              │ CompositionEngine        │            │
-   │                              │  HWC overlays / GPU       │  ── Ch.2  │
+   │                              │  HWC overlays / GPU      │  ── Ch.2   │
    │                              └────────────┬─────────────┘            │
    │                                           │ present (to the panel)   │
    │                                           ▼   ... and, in parallel:  │
    │                              ┌──────────────────────────┐            │
    │   android.surfaceflinger.    │ LayerTracing             │            │
-   │   layers data source  ─────► │  serialize a snapshot    │  ── Ch.4  │
+   │   layers data source  ─────► │  serialize a snapshot    │  ── Ch.4   │
    │                              │  of the whole layer tree │            │
    │                              └────────────┬─────────────┘            │
-   └───────────────────────────────────────────┼────────────────────────┘
-                                                │ one TracePacket per frame
-                                                ▼
-   ┌─────────────────────────────────────────────────────────────────────┐
+   └───────────────────────────────────────────┼──────────────────────────┘
+                                               │ one TracePacket per frame
+                                               ▼
+   ┌──────────────────────────────────────────────────────────────────────┐
    │ OFF DEVICE — the trace file, then the browser                        │
-   │                                                                     │
+   │                                                                      │
    │  trace_processor (WASM)                                              │
-   │  ──────────────────────                                             │
-   │  winscope importer:  proto snapshot ──► SQL rows        ── Ch.5     │
+   │  ──────────────────────                                              │
+   │  winscope importer:  proto snapshot ──► SQL rows        ── Ch.5      │
    │    __intrinsic_surfaceflinger_layers_snapshot                        │
    │    __intrinsic_surfaceflinger_layer / _display                       │
    │    __intrinsic_winscope_trace_rect / _rect / _transform              │
    │                                            │ SQL queries             │
    │                                            ▼                         │
-   │  com.android.SurfaceFlinger UI plugin                  ── Ch.7      │
+   │  com.android.SurfaceFlinger UI plugin                  ── Ch.7       │
    │    timeline track per display  ·  full-screen page                   │
    │    Surface (3D rects) · Hierarchy · Properties                       │
-   └─────────────────────────────────────────────────────────────────────┘
+   └──────────────────────────────────────────────────────────────────────┘
 ```
 
 The two on-device halves are independent: composition is what the user sees; tracing is a side-channel that serializes the same layer state SF already computed. Off device, trace_processor turns the proto into queryable tables and the plugin renders them.
@@ -133,9 +133,9 @@ You can start Chapter 1 without these, but these eight words recur everywhere, s
 
 ---
 
-## 3. A note on accuracy and honesty
+## 3. What this book does and doesn't claim
 
-Where the source is unambiguous, this book quotes it. Where something is version-specific (SurfaceFlinger has been heavily rearchitected — there is now a "FrontEnd" that owns the tree and a slim legacy `Layer` that owns the buffer pipeline), the book says so rather than pretend there's one timeless design. Where the plugin has **limitations** (things the standalone Winscope does that it doesn't yet, because they need data a layers-only trace doesn't carry), Chapter 8 lists them plainly. The goal is understanding you can trust, not marketing.
+Where the source is unambiguous, this book quotes it. Where something is version-specific (SurfaceFlinger has been heavily rearchitected — there is now a "FrontEnd" that owns the tree and a slim legacy `Layer` that owns the buffer pipeline), the book says so rather than pretend there's one timeless design. Where the plugin has **limitations** (things the standalone Winscope does that it doesn't yet, because they need data a layers-only trace doesn't carry), Chapter 8 lists them plainly.
 
 ## Further reading
 
